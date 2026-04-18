@@ -1,0 +1,573 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum RoleCode {
+  ADMIN
+  USER
+}
+
+enum CampaignStatus {
+  PLANNED
+  ACTIVE
+  CLOSED
+}
+
+enum OperationCategory {
+  SOWING
+  HARVEST
+  SOIL_PREPARATION
+  TREATMENT
+  IRRIGATION
+  OTHER
+}
+
+enum DocumentModule {
+  FIELDS
+  OPERATIONS
+  INBOUND_DDT
+  OUTBOUND_DDT
+  PRODUCTS
+  FINANCE
+  GENERAL
+}
+
+enum DeliveryDirection {
+  INBOUND
+  OUTBOUND
+}
+
+enum DdtStatus {
+  DRAFT
+  ISSUED
+  SENT
+  ARCHIVED
+  CANCELLED
+}
+
+enum WarehouseMovementSource {
+  INBOUND_DDT
+  OPERATION
+  MANUAL_ADJUSTMENT
+  OPENING_BALANCE
+}
+
+enum WarehouseMovementType {
+  IN
+  OUT
+  ADJUSTMENT
+}
+
+enum FinanceEntryType {
+  COST
+  REVENUE
+}
+
+enum CalendarEventSource {
+  SYSTEM
+  MANUAL
+}
+
+enum GmailImportStatus {
+  DRAFT
+  IMPORTED
+  SKIPPED
+  ERROR
+}
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String?   @unique
+  emailVerified DateTime?
+  image         String?
+  isActive      Boolean   @default(true)
+  roles         Role[]
+  accounts      Account[]
+  sessions      Session[]
+  auditLogs     AuditLog[]
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+model Role {
+  id          String   @id @default(cuid())
+  code        RoleCode @unique
+  name        String
+  description String?
+  users       User[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model AuthorizedEmail {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  roleCode  RoleCode @default(USER)
+  note      String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+model Field {
+  id                String              @id @default(cuid())
+  commonName        String
+  cadastralSheet    String
+  cadastralParcel   String
+  cadastralAreaHa   Decimal             @db.Decimal(10, 4)
+  cultivatedAreaHa  Decimal             @db.Decimal(10, 4)
+  latitude          Decimal?            @db.Decimal(10, 7)
+  longitude         Decimal?            @db.Decimal(10, 7)
+  geoPolygon        Json?
+  geoNotes          String?
+  pacHistory        FieldPacHistory[]
+  groupMemberships  FieldGroupMembership[]
+  operations        OperationField[]
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+
+  @@index([commonName])
+  @@unique([cadastralSheet, cadastralParcel])
+}
+
+model FieldPacHistory {
+  id        String   @id @default(cuid())
+  fieldId   String
+  year      Int
+  included  Boolean  @default(false)
+  note      String?
+  field     Field    @relation(fields: [fieldId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([fieldId, year])
+}
+
+model Campaign {
+  id          String         @id @default(cuid())
+  name        String         @unique
+  startYear   Int
+  endYear     Int
+  startsOn    DateTime
+  endsOn      DateTime
+  status      CampaignStatus @default(PLANNED)
+  fieldGroups FieldGroup[]
+  operations  Operation[]
+  costs       FinanceCost[]
+  revenues    FinanceRevenue[]
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+}
+
+model Crop {
+  id          String       @id @default(cuid())
+  name        String       @unique
+  variety     String?
+  notes       String?
+  fieldGroups FieldGroup[]
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+}
+
+model FieldGroup {
+  id          String                 @id @default(cuid())
+  name        String
+  campaignId  String
+  cropId      String?
+  notes       String?
+  campaign    Campaign               @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  crop        Crop?                   @relation(fields: [cropId], references: [id])
+  memberships FieldGroupMembership[]
+  operations  OperationFieldGroup[]
+  allocations FinanceAllocation[]
+  createdAt   DateTime               @default(now())
+  updatedAt   DateTime               @updatedAt
+
+  @@unique([campaignId, name])
+}
+
+model FieldGroupMembership {
+  id           String     @id @default(cuid())
+  fieldId      String
+  fieldGroupId String
+  areaHa       Decimal?   @db.Decimal(10, 4)
+  field        Field      @relation(fields: [fieldId], references: [id], onDelete: Cascade)
+  fieldGroup   FieldGroup @relation(fields: [fieldGroupId], references: [id], onDelete: Cascade)
+  createdAt    DateTime   @default(now())
+
+  @@unique([fieldId, fieldGroupId])
+}
+
+model OperationType {
+  id          String            @id @default(cuid())
+  name        String            @unique
+  category    OperationCategory
+  description String?
+  operations  Operation[]
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+}
+
+model Operation {
+  id                  String                 @id @default(cuid())
+  campaignId          String
+  operationTypeId     String
+  performedOn         DateTime
+  productMaterialId   String?
+  quantity            Decimal?               @db.Decimal(12, 3)
+  quantityUnit        String?
+  treatedAreaHa       Decimal?               @db.Decimal(10, 4)
+  treatmentReason     String?
+  notes               String?
+  campaign            Campaign               @relation(fields: [campaignId], references: [id])
+  operationType       OperationType          @relation(fields: [operationTypeId], references: [id])
+  productMaterial     ProductMaterial?       @relation(fields: [productMaterialId], references: [id])
+  fields              OperationField[]
+  fieldGroups         OperationFieldGroup[]
+  attachments         OperationAttachment[]
+  warehouseMovements  WarehouseMovement[]
+  calendarEvents      CalendarEvent[]
+  createdAt           DateTime               @default(now())
+  updatedAt           DateTime               @updatedAt
+
+  @@index([performedOn])
+}
+
+model OperationField {
+  id          String    @id @default(cuid())
+  operationId String
+  fieldId     String
+  operation   Operation @relation(fields: [operationId], references: [id], onDelete: Cascade)
+  field       Field     @relation(fields: [fieldId], references: [id], onDelete: Cascade)
+
+  @@unique([operationId, fieldId])
+}
+
+model OperationFieldGroup {
+  id           String     @id @default(cuid())
+  operationId  String
+  fieldGroupId String
+  operation    Operation  @relation(fields: [operationId], references: [id], onDelete: Cascade)
+  fieldGroup   FieldGroup @relation(fields: [fieldGroupId], references: [id], onDelete: Cascade)
+
+  @@unique([operationId, fieldGroupId])
+}
+
+model OperationAttachment {
+  id          String    @id @default(cuid())
+  operationId String
+  driveFileId String
+  label       String?
+  operation   Operation @relation(fields: [operationId], references: [id], onDelete: Cascade)
+  driveFile   DriveFile @relation(fields: [driveFileId], references: [id])
+  createdAt   DateTime  @default(now())
+}
+
+model ProductMaterial {
+  id                  String                @id @default(cuid())
+  name                String                @unique
+  code                String?
+  category            String
+  unit                String
+  active              Boolean               @default(true)
+  notes               String?
+  operations          Operation[]
+  inboundRows         InboundDeliveryRow[]
+  outboundRows        OutboundDdtRow[]
+  warehouseMovements  WarehouseMovement[]
+  documents           ProductDocument[]
+  createdAt           DateTime              @default(now())
+  updatedAt           DateTime              @updatedAt
+}
+
+model Supplier {
+  id             String                @id @default(cuid())
+  businessName   String
+  taxCode        String?
+  vatNumber      String?
+  email          String?
+  phone          String?
+  notes          String?
+  inboundNotes   InboundDeliveryNote[]
+  financeCosts   FinanceCost[]
+  createdAt      DateTime              @default(now())
+  updatedAt      DateTime              @updatedAt
+}
+
+model Customer {
+  id             String             @id @default(cuid())
+  businessName   String
+  taxCode        String?
+  vatNumber      String?
+  email          String?
+  phone          String?
+  address        String?
+  notes          String?
+  outboundDdt    OutboundDdt[]
+  financeRevenue FinanceRevenue[]
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+}
+
+model InboundDeliveryNote {
+  id                 String               @id @default(cuid())
+  supplierId         String?
+  number             String
+  issuedOn           DateTime
+  receivedOn         DateTime?
+  status             DdtStatus            @default(DRAFT)
+  notes              String?
+  driveFileId        String?
+  gmailImportSessionId String?
+  supplier           Supplier?            @relation(fields: [supplierId], references: [id])
+  driveFile          DriveFile?           @relation(fields: [driveFileId], references: [id])
+  gmailImportSession GmailImportSession?  @relation(fields: [gmailImportSessionId], references: [id])
+  rows               InboundDeliveryRow[]
+  createdAt          DateTime             @default(now())
+  updatedAt          DateTime             @updatedAt
+
+  @@index([issuedOn])
+}
+
+model InboundDeliveryRow {
+  id                    String              @id @default(cuid())
+  inboundDeliveryNoteId String
+  productMaterialId     String
+  quantity              Decimal             @db.Decimal(12, 3)
+  unit                  String
+  lot                   String?
+  inboundDeliveryNote   InboundDeliveryNote @relation(fields: [inboundDeliveryNoteId], references: [id], onDelete: Cascade)
+  productMaterial       ProductMaterial     @relation(fields: [productMaterialId], references: [id])
+}
+
+model OutboundDdt {
+  id          String          @id @default(cuid())
+  customerId  String?
+  number      String
+  issuedOn    DateTime
+  status      DdtStatus       @default(DRAFT)
+  notes       String?
+  driveFileId String?
+  customer    Customer?       @relation(fields: [customerId], references: [id])
+  driveFile   DriveFile?      @relation(fields: [driveFileId], references: [id])
+  rows        OutboundDdtRow[]
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  @@unique([number])
+  @@index([issuedOn])
+}
+
+model OutboundDdtRow {
+  id                String          @id @default(cuid())
+  outboundDdtId      String
+  productMaterialId  String
+  description        String?
+  quantity           Decimal         @db.Decimal(12, 3)
+  unit               String
+  outboundDdt        OutboundDdt     @relation(fields: [outboundDdtId], references: [id], onDelete: Cascade)
+  productMaterial    ProductMaterial @relation(fields: [productMaterialId], references: [id])
+}
+
+model WarehouseMovement {
+  id                String                  @id @default(cuid())
+  productMaterialId String
+  movementType      WarehouseMovementType
+  source            WarehouseMovementSource
+  sourceId          String?
+  operationId       String?
+  quantity          Decimal                 @db.Decimal(12, 3)
+  unit              String
+  movedOn           DateTime
+  note              String?
+  productMaterial   ProductMaterial         @relation(fields: [productMaterialId], references: [id])
+  operation         Operation?              @relation(fields: [operationId], references: [id])
+  adjustment        WarehouseAdjustment?
+  createdAt         DateTime                @default(now())
+
+  @@index([movedOn])
+  @@index([productMaterialId])
+}
+
+model WarehouseAdjustment {
+  id                  String            @id @default(cuid())
+  warehouseMovementId String            @unique
+  reason              String
+  approvedByUserId    String?
+  warehouseMovement   WarehouseMovement @relation(fields: [warehouseMovementId], references: [id], onDelete: Cascade)
+  createdAt           DateTime          @default(now())
+}
+
+model ProductDocument {
+  id                String          @id @default(cuid())
+  productMaterialId String
+  driveFileId       String
+  documentType      String
+  validFrom         DateTime?
+  validTo           DateTime?
+  productMaterial   ProductMaterial @relation(fields: [productMaterialId], references: [id], onDelete: Cascade)
+  driveFile         DriveFile       @relation(fields: [driveFileId], references: [id])
+  createdAt         DateTime        @default(now())
+}
+
+model FinanceCost {
+  id          String              @id @default(cuid())
+  supplierId  String?
+  campaignId  String?
+  occurredOn  DateTime
+  category    String
+  description String
+  amount      Decimal             @db.Decimal(12, 2)
+  vatAmount   Decimal?            @db.Decimal(12, 2)
+  driveFileId String?
+  supplier    Supplier?           @relation(fields: [supplierId], references: [id])
+  campaign    Campaign?           @relation(fields: [campaignId], references: [id])
+  driveFile   DriveFile?          @relation(fields: [driveFileId], references: [id])
+  allocations FinanceAllocation[]
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+}
+
+model FinanceRevenue {
+  id          String              @id @default(cuid())
+  customerId  String?
+  campaignId  String?
+  occurredOn  DateTime
+  category    String
+  description String
+  amount      Decimal             @db.Decimal(12, 2)
+  vatAmount   Decimal?            @db.Decimal(12, 2)
+  driveFileId String?
+  customer    Customer?           @relation(fields: [customerId], references: [id])
+  campaign    Campaign?           @relation(fields: [campaignId], references: [id])
+  driveFile   DriveFile?          @relation(fields: [driveFileId], references: [id])
+  allocations FinanceAllocation[]
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+}
+
+model FinanceAllocation {
+  id           String            @id @default(cuid())
+  entryType    FinanceEntryType
+  financeCostId String?
+  financeRevenueId String?
+  fieldGroupId String
+  amount       Decimal           @db.Decimal(12, 2)
+  note         String?
+  financeCost  FinanceCost?      @relation(fields: [financeCostId], references: [id], onDelete: Cascade)
+  financeRevenue FinanceRevenue? @relation(fields: [financeRevenueId], references: [id], onDelete: Cascade)
+  fieldGroup   FieldGroup        @relation(fields: [fieldGroupId], references: [id])
+  createdAt    DateTime          @default(now())
+}
+
+model CalendarEvent {
+  id          String              @id @default(cuid())
+  title       String
+  startsAt    DateTime
+  endsAt      DateTime?
+  source      CalendarEventSource @default(MANUAL)
+  operationId String?
+  notes       String?
+  operation   Operation?          @relation(fields: [operationId], references: [id])
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+
+  @@index([startsAt])
+}
+
+model DriveFile {
+  id                     String                  @id @default(cuid())
+  googleDriveFileId      String                  @unique
+  name                   String
+  mimeType               String
+  module                 DocumentModule          @default(GENERAL)
+  folderPath             String?
+  webViewLink            String?
+  sizeBytes              BigInt?
+  checksum               String?
+  uploadedAt             DateTime?
+  operationAttachments   OperationAttachment[]
+  productDocuments       ProductDocument[]
+  inboundDeliveryNotes   InboundDeliveryNote[]
+  outboundDdt            OutboundDdt[]
+  financeCosts           FinanceCost[]
+  financeRevenues        FinanceRevenue[]
+  createdAt              DateTime                @default(now())
+  updatedAt              DateTime                @updatedAt
+}
+
+model GmailImportSession {
+  id                   String                @id @default(cuid())
+  gmailMessageId        String
+  fromEmail             String?
+  subject               String?
+  receivedAt            DateTime?
+  attachmentName        String?
+  attachmentMimeType    String?
+  status                GmailImportStatus    @default(DRAFT)
+  draftPayload          Json?
+  importedDriveFileId   String?
+  errorMessage          String?
+  inboundDeliveryNotes  InboundDeliveryNote[]
+  createdAt             DateTime             @default(now())
+  updatedAt             DateTime             @updatedAt
+
+  @@index([gmailMessageId])
+}
+
+model AuditLog {
+  id          String   @id @default(cuid())
+  actorUserId String?
+  action      String
+  entityType  String
+  entityId    String?
+  before      Json?
+  after       Json?
+  metadata    Json?
+  ipAddress   String?
+  createdAt   DateTime @default(now())
+  actor       User?    @relation(fields: [actorUserId], references: [id])
+
+  @@index([entityType, entityId])
+  @@index([createdAt])
+}
