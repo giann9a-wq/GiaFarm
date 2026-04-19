@@ -18,6 +18,9 @@ export default async function DeliveryNotesPage() {
         <Button asChild variant="secondary">
           <Link href="/bolle-ddt/bolle/nuova">Nuova bolla</Link>
         </Button>
+        <Button asChild variant="secondary">
+          <Link href="/bolle-ddt/anagrafiche">Anagrafiche</Link>
+        </Button>
         <Button asChild>
           <Link href="/bolle-ddt/ddt/nuovo">Nuovo DDT</Link>
         </Button>

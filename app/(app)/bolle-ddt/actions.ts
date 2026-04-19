@@ -191,6 +191,94 @@ export async function createInboundDeliveryNoteAction(formData: FormData) {
   redirect(`/bolle-ddt/bolle/${note.id}`);
 }
 
+export async function createSupplierAction(formData: FormData) {
+  const session = await requireUser();
+  const businessName = stringValue(formData, "businessName");
+  if (!businessName) throw new Error("Il nome fornitore e' obbligatorio.");
+
+  const supplier = await prisma.supplier.create({
+    data: {
+      businessName,
+      vatNumber: stringValue(formData, "vatNumber") || null,
+      taxCode: stringValue(formData, "taxCode") || null,
+      email: stringValue(formData, "email") || null,
+      phone: stringValue(formData, "phone") || null,
+      notes: stringValue(formData, "notes") || null
+    }
+  });
+
+  await writeAuditLog({
+    actorUserId: session.user?.id,
+    action: "SUPPLIER_CREATED",
+    entityType: "Supplier",
+    entityId: supplier.id,
+    after: supplier
+  });
+
+  revalidatePath("/bolle-ddt");
+  revalidatePath("/bolle-ddt/anagrafiche");
+  revalidatePath("/bolle-ddt/bolle/nuova");
+  redirect("/bolle-ddt/anagrafiche");
+}
+
+export async function createCustomerAction(formData: FormData) {
+  const session = await requireUser();
+  const businessName = stringValue(formData, "businessName");
+  if (!businessName) throw new Error("Il nome destinatario e' obbligatorio.");
+
+  const customer = await prisma.customer.create({
+    data: {
+      businessName,
+      vatNumber: stringValue(formData, "vatNumber") || null,
+      taxCode: stringValue(formData, "taxCode") || null,
+      email: stringValue(formData, "email") || null,
+      phone: stringValue(formData, "phone") || null,
+      address: stringValue(formData, "address") || null,
+      notes: stringValue(formData, "notes") || null
+    }
+  });
+
+  await writeAuditLog({
+    actorUserId: session.user?.id,
+    action: "CUSTOMER_CREATED",
+    entityType: "Customer",
+    entityId: customer.id,
+    after: customer
+  });
+
+  revalidatePath("/bolle-ddt");
+  revalidatePath("/bolle-ddt/anagrafiche");
+  revalidatePath("/bolle-ddt/ddt/nuovo");
+  redirect("/bolle-ddt/anagrafiche");
+}
+
+export async function createDdtDestinationAction(formData: FormData) {
+  const session = await requireUser();
+  const name = stringValue(formData, "name");
+  if (!name) throw new Error("Il nome destinazione e' obbligatorio.");
+
+  const destination = await prisma.ddtDestination.create({
+    data: {
+      customerId: stringValue(formData, "customerId") || null,
+      name,
+      address: stringValue(formData, "address") || null,
+      notes: stringValue(formData, "notes") || null
+    }
+  });
+
+  await writeAuditLog({
+    actorUserId: session.user?.id,
+    action: "DDT_DESTINATION_CREATED",
+    entityType: "DdtDestination",
+    entityId: destination.id,
+    after: destination
+  });
+
+  revalidatePath("/bolle-ddt/anagrafiche");
+  revalidatePath("/bolle-ddt/ddt/nuovo");
+  redirect("/bolle-ddt/anagrafiche");
+}
+
 async function nextDdtNumber(issuedOn: Date) {
   const year = issuedOn.getUTCFullYear();
   const sequence = await prisma.ddtNumberSequence.upsert({

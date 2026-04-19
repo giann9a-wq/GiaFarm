@@ -26,6 +26,19 @@ export async function getDeliveryOverview() {
   return { inboundNotes, outboundDdt, suppliers, customers, products };
 }
 
+export async function getDeliveryMasterData() {
+  const [suppliers, customers, destinations] = await Promise.all([
+    prisma.supplier.findMany({ orderBy: { businessName: "asc" } }),
+    prisma.customer.findMany({ orderBy: { businessName: "asc" } }),
+    prisma.ddtDestination.findMany({
+      include: { customer: true },
+      orderBy: [{ name: "asc" }]
+    })
+  ]);
+
+  return { suppliers, customers, destinations };
+}
+
 export async function getInboundDeliveryNote(id: string) {
   return prisma.inboundDeliveryNote.findUnique({
     where: { id },
