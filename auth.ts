@@ -17,6 +17,7 @@ export const authConfig = {
     Google({
       clientId: env.AUTH_GOOGLE_ID,
       clientSecret: env.AUTH_GOOGLE_SECRET,
+      allowDangerousEmailAccountLinking: true,
       authorization: {
         params: {
           prompt: "consent",
@@ -34,12 +35,43 @@ export const authConfig = {
     })
   ],
   callbacks: {
-    async signIn({ user }) {
+    async signIn({ user, account }) {
       const email = user.email?.toLowerCase();
       if (!email) {
         console.warn("GiaFarm sign-in rejected: Google account has no email.");
         return false;
       }
+
+      console.info(`GiaFarm sign-in: Google email received: ${email}.`);
+
+      const existingUser = await prisma.user.findUnique({
+        where: { email },
+        include: { accounts: true }
+      });
+      const linkedOAuthAccount =
+        account?.provider && account.providerAccountId
+          ? await prisma.account.findUnique({
+              where: {
+                provider_providerAccountId: {
+                  provider: account.provider,
+                  providerAccountId: account.providerAccountId
+                }
+              }
+            })
+          : null;
+
+      console.info(
+        [
+          "GiaFarm sign-in account state:",
+          `email=${email}`,
+          `existingUser=${existingUser ? "yes" : "no"}`,
+          `provider=${account?.provider ?? "unknown"}`,
+          `oauthAccountLinked=${linkedOAuthAccount ? "yes" : "no"}`,
+          `userLinkedProviders=${
+            existingUser?.accounts.map((item) => item.provider).join(",") || "none"
+          }`
+        ].join(" ")
+      );
 
       const authorized = await prisma.authorizedEmail.findUnique({
         where: { email }
@@ -77,6 +109,10 @@ export const authConfig = {
           roles: { connect: [{ id: role.id }] }
         }
       });
+
+      console.info(
+        `GiaFarm sign-in allowed: ${email} as ${roleCode} via ${account?.provider ?? "unknown"}.`
+      );
 
       return true;
     },
