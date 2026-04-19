@@ -152,36 +152,57 @@ model VerificationToken {
 
 model Field {
   id               String                 @id @default(cuid())
-  commonName       String
+  municipality     String                 @default("NON DEFINITO")
   cadastralSheet   String
   cadastralParcel  String
-  cadastralAreaHa  Decimal                @db.Decimal(10, 4)
-  cultivatedAreaHa Decimal                @db.Decimal(10, 4)
+  commonName       String?
+  cadastralAreaSqm Decimal                @default(0) @db.Decimal(12, 2)
+  notes            String?
   latitude         Decimal?               @db.Decimal(10, 7)
   longitude        Decimal?               @db.Decimal(10, 7)
   geoPolygon       Json?
   geoNotes         String?
+  deletedAt        DateTime?
+  usageHistory     FieldUsageHistory[]
   pacHistory       FieldPacHistory[]
   groupMemberships FieldGroupMembership[]
   operations       OperationField[]
   createdAt        DateTime               @default(now())
   updatedAt        DateTime               @updatedAt
 
-  @@unique([cadastralSheet, cadastralParcel])
+  @@unique([municipality, cadastralSheet, cadastralParcel])
+  @@index([municipality])
   @@index([commonName])
 }
 
 model FieldPacHistory {
-  id        String   @id @default(cuid())
-  fieldId   String
-  year      Int
-  included  Boolean  @default(false)
-  note      String?
-  field     Field    @relation(fields: [fieldId], references: [id], onDelete: Cascade)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id              String   @id @default(cuid())
+  fieldId         String
+  year            Int
+  included        Boolean?
+  note            String?
+  changedByUserId String?
+  field           Field    @relation(fields: [fieldId], references: [id], onDelete: Cascade)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
   @@unique([fieldId, year])
+  @@index([year])
+}
+
+model FieldUsageHistory {
+  id              String   @id @default(cuid())
+  fieldId         String
+  year            Int
+  usedAreaSqm     Decimal  @db.Decimal(12, 2)
+  note            String?
+  changedByUserId String?
+  field           Field    @relation(fields: [fieldId], references: [id], onDelete: Cascade)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([fieldId, year])
+  @@index([year])
 }
 
 model Campaign {

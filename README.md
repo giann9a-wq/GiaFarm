@@ -194,6 +194,19 @@ Lo schema Prisma copre:
 - eventi calendario di sistema e manuali
 - sessioni import Gmail
 
+## Modulo Campi
+
+Il modulo Campi usa dati reali da Prisma/Supabase.
+
+- `Field`: anagrafica stabile del terreno, con comune, foglio, mappale, alias, superficie catastale in mq e note.
+- `FieldUsageHistory`: storico annuale della superficie utilizzata in mq.
+- `FieldPacHistory`: storico annuale dello stato PAC; `null` indica valore non ancora definito.
+- `AuditLog`: registra creazione/modifica dei valori storici con utente, valore precedente e valore nuovo.
+
+Il seed importa i campi iniziali in modo idempotente usando la chiave `comune + foglio + mappale`. Per ogni campo crea o aggiorna la riga di superficie utilizzata 2026 e crea una riga PAC 2026 con valore non definito. I vecchi campi demo del bootstrap vengono nascosti con soft delete, senza cancellare relazioni storiche.
+
+L'eliminazione campi non e' ancora esposta in UI: andra' implementata come soft delete.
+
 ## Mappa campi
 
 MVP previsto:
