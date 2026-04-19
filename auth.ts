@@ -36,7 +36,10 @@ export const authConfig = {
   callbacks: {
     async signIn({ user }) {
       const email = user.email?.toLowerCase();
-      if (!email) return false;
+      if (!email) {
+        console.warn("GiaFarm sign-in rejected: Google account has no email.");
+        return false;
+      }
 
       const authorized = await prisma.authorizedEmail.findUnique({
         where: { email }
@@ -44,6 +47,7 @@ export const authConfig = {
       const envAdmins = adminEmailsFromEnv();
 
       if (!authorized && !envAdmins.includes(email)) {
+        console.warn(`GiaFarm sign-in rejected: ${email} is not whitelisted.`);
         return false;
       }
 

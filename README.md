@@ -52,7 +52,7 @@ npm install
 cp .env.example .env
 ```
 
-3. Configura almeno `DATABASE_URL`, `AUTH_SECRET`, `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET`, `ADMIN_EMAILS`.
+3. Configura almeno `DATABASE_URL`, `DIRECT_URL`, `AUTH_SECRET`, `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET`, `ADMIN_EMAILS`.
 
 4. Genera Prisma e crea lo schema:
 
@@ -83,11 +83,13 @@ Creare account e progetti dedicati, separati da altri gestionali.
 
 ### Database
 
-1. Creare un database PostgreSQL dedicato.
-2. Copiare la connection string in `DATABASE_URL`.
-3. Usare SSL in produzione.
-4. Eseguire migrazioni Prisma da ambiente controllato.
-5. Abilitare backup automatici dal provider.
+1. Creare un database PostgreSQL dedicato su Supabase.
+2. Creare un utente database dedicato a Prisma, preferibilmente `prisma`, con privilegi sullo schema `public`.
+3. Copiare la transaction pooler connection string in `DATABASE_URL`.
+4. Copiare la direct connection Supabase in `DIRECT_URL`.
+5. Usare SSL in produzione.
+6. Eseguire migrazioni Prisma da ambiente controllato.
+7. Abilitare backup automatici dal provider.
 
 ### Google Cloud
 
@@ -125,6 +127,47 @@ Opzione consigliata per ambiente aziendale Google Workspace:
    - `GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY`
 
 Per account Google consumer non Workspace, usare OAuth utente dedicato come fase successiva: la struttura `lib/google` e' gia' isolata per sostituire la strategia di autenticazione.
+
+## Configurazione ambiente reale
+
+GiaFarm usa Supabase come PostgreSQL gestito tramite Prisma. Le chiavi Supabase pubbliche `NEXT_PUBLIC_SUPABASE_URL` e `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` sono previste in `.env.example` per future integrazioni client, ma Prisma non le usa per collegarsi al database.
+
+Variabili obbligatorie per avvio, build e deploy:
+
+- `DATABASE_URL`: connection string runtime Prisma. Su Vercel usare Supavisor transaction pooler, porta `6543`, con `pgbouncer=true`.
+- `DIRECT_URL`: connection string per Prisma CLI e migrazioni. Usare la direct connection Supabase `db.PROJECT_REF.supabase.co:5432`.
+- `AUTH_SECRET`: segreto Auth.js generato con valore casuale forte.
+- `AUTH_GOOGLE_ID`: Client ID OAuth Google Web Application.
+- `AUTH_GOOGLE_SECRET`: Client Secret OAuth Google Web Application.
+- `ADMIN_EMAILS`: elenco email admin separate da virgola, senza parentesi, ad esempio `admin@example.com,altro@example.com`.
+
+Variabili Google Drive/Gmail da compilare quando si attiva l'import documentale:
+
+- `GOOGLE_DRIVE_ROOT_FOLDER_ID`: id cartella root Drive GiaFarm.
+- `GOOGLE_SCANNER_EMAIL`: casella dedicata che riceve scansioni.
+- `GOOGLE_GMAIL_SCANNER_LABEL`: label Gmail da leggere, default `INBOX`.
+- `GOOGLE_SERVICE_ACCOUNT_EMAIL`: email service account, se si usa Google Workspace con domain-wide delegation.
+- `GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY`: private key service account con newline escapati come `\n`.
+
+Redirect URI da configurare in Google Cloud OAuth:
+
+- Locale: `http://localhost:3000/api/auth/callback/google`
+- Produzione Vercel: `https://gia-farm.vercel.app/api/auth/callback/google`
+- Preview Vercel, se abilitate: aggiungere gli URL preview necessari oppure disattivare login sulle preview.
+
+Dominio produzione corretto:
+
+- `https://gia-farm.vercel.app`
+
+Il dominio `https://giafarm.vercel.app` senza trattino non appartiene a questo deploy e puo' mostrare `DEPLOYMENT_NOT_FOUND`.
+
+Note Supabase/Prisma:
+
+- In serverless e' consigliato usare il pooler transaction per `DATABASE_URL`.
+- `DIRECT_URL` serve per migrazioni, introspezione e comandi Prisma CLI.
+- Se il pooler transaction genera errori di prepared statement, verificare che `DATABASE_URL` includa `pgbouncer=true`.
+- Non salvare password database, Google secret o service account key nel repository.
+- Se un secret e' stato condiviso in chat o in un canale non sicuro, rigenerarlo prima della produzione.
 
 ## Autenticazione e ruoli
 

@@ -14,6 +14,9 @@
 ## Variabili ambiente
 
 - [ ] `DATABASE_URL`
+- [ ] `DIRECT_URL`
+- [ ] `NEXT_PUBLIC_SUPABASE_URL` se si usera' Supabase client
+- [ ] `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` se si usera' Supabase client
 - [ ] `AUTH_SECRET`
 - [ ] `NEXTAUTH_URL`
 - [ ] `APP_BASE_URL`
