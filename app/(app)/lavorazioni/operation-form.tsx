@@ -1,22 +1,61 @@
-import { createOperationAction } from "@/app/(app)/lavorazioni/actions";
+import { createOperationAction, updateOperationAction } from "@/app/(app)/lavorazioni/actions";
+import { OperationAreaFields } from "@/app/(app)/lavorazioni/operation-area-fields";
 import { Button } from "@/components/ui/button";
-import { formatCategory } from "@/lib/operations/format";
-import { getOperationsFiltersData } from "@/lib/operations/queries";
+import { formatCategory, formatDecimal } from "@/lib/operations/format";
+import {
+  fieldsUsedAreaHa,
+  getOperationFormData,
+  groupUsedAreaHa
+} from "@/lib/operations/queries";
 
-export async function OperationForm() {
-  const { campaigns, groups, fields, operationTypes, products } =
-    await getOperationsFiltersData();
+type OperationFormProps = {
+  operationId?: string;
+  defaultFieldGroupId?: string;
+  defaultFieldIds?: string[];
+};
+
+export async function OperationForm({
+  operationId,
+  defaultFieldGroupId,
+  defaultFieldIds = []
+}: OperationFormProps) {
+  const { campaigns, groups, fields, operationTypes, products, operation } =
+    await getOperationFormData(operationId);
   const activeCampaign =
     campaigns.find((campaign) => campaign.status === "ACTIVE") ?? campaigns[0];
+  const selectedGroupId =
+    operation?.fieldGroups[0]?.fieldGroupId ?? defaultFieldGroupId ?? "";
+  const selectedFieldIds =
+    operation?.fields.map(({ fieldId }) => fieldId) ?? defaultFieldIds;
+  const selectedGroup = groups.find((group) => group.id === selectedGroupId);
+  const suggestedAreaHa =
+    operation?.treatedAreaHa ??
+    (selectedGroup
+      ? groupUsedAreaHa(selectedGroup)
+      : fieldsUsedAreaHa(fields, selectedFieldIds));
+  const groupOptions = groups.map((group) => ({
+    id: group.id,
+    label: `${group.campaign.name} - ${group.name}${group.crop ? ` (${group.crop.name})` : ""}`,
+    areaHa: groupUsedAreaHa(group),
+    fieldIds: group.memberships.map((membership) => membership.field.id)
+  }));
+  const fieldOptions = fields.map((field) => ({
+    id: field.id,
+    label: `${field.municipality} Fg. ${field.cadastralSheet} Map. ${field.cadastralParcel}`,
+    areaHa: fieldsUsedAreaHa([field], [field.id])
+  }));
+  const action = operation
+    ? updateOperationAction.bind(null, operation.id)
+    : createOperationAction;
 
   return (
-    <form action={createOperationAction} className="space-y-6 rounded-[8px] border border-border bg-card p-5">
+    <form action={action} className="space-y-6 rounded-[8px] border border-border bg-card p-5">
       <div className="grid gap-4 lg:grid-cols-3">
         <label className="text-sm font-medium">
           Campagna
           <select
             className="focus-ring mt-2 h-10 w-full rounded-[8px] border border-input bg-background px-3"
-            defaultValue={activeCampaign?.id}
+            defaultValue={operation?.campaignId ?? selectedGroup?.campaignId ?? activeCampaign?.id}
             name="campaignId"
             required
           >
@@ -31,6 +70,7 @@ export async function OperationForm() {
           Data
           <input
             className="focus-ring mt-2 h-10 w-full rounded-[8px] border border-input bg-background px-3"
+            defaultValue={operation?.performedOn.toISOString().slice(0, 10)}
             name="performedOn"
             required
             type="date"
@@ -42,6 +82,7 @@ export async function OperationForm() {
             className="focus-ring mt-2 h-10 w-full rounded-[8px] border border-input bg-background px-3"
             name="operationTypeId"
             required
+            defaultValue={operation?.operationTypeId ?? ""}
           >
             <option value="">Seleziona</option>
             {operationTypes.map((type) => (
@@ -54,26 +95,21 @@ export async function OperationForm() {
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
-        <label className="text-sm font-medium">
-          Gruppo campi
-          <select
-            className="focus-ring mt-2 h-10 w-full rounded-[8px] border border-input bg-background px-3"
-            name="fieldGroupId"
-          >
-            <option value="">Nessun gruppo</option>
-            {groups.map((group) => (
-              <option key={group.id} value={group.id}>
-                {group.campaign.name} - {group.name}
-                {group.crop ? ` (${group.crop.name})` : ""}
-              </option>
-            ))}
-          </select>
-        </label>
+        <OperationAreaFields
+          groups={groupOptions}
+          fields={fieldOptions}
+          defaultFieldGroupId={selectedGroupId}
+          defaultFieldIds={selectedFieldIds}
+          defaultAreaHa={
+            suggestedAreaHa ? formatDecimal(suggestedAreaHa, 4).replace(/\./g, "") : ""
+          }
+        />
         <label className="text-sm font-medium">
           Prodotto / materiale
           <select
             className="focus-ring mt-2 h-10 w-full rounded-[8px] border border-input bg-background px-3"
             name="productMaterialId"
+            defaultValue={operation?.productMaterialId ?? ""}
           >
             <option value="">Nessun prodotto</option>
             {products.map((product) => (
@@ -85,31 +121,14 @@ export async function OperationForm() {
         </label>
       </div>
 
-      <fieldset className="rounded-[8px] border border-border p-4">
-        <legend className="px-1 text-sm font-semibold">Campi singoli coinvolti</legend>
-        <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
-          {fields.map((field) => (
-            <label className="flex items-center gap-2 text-sm" key={field.id}>
-              <input className="h-4 w-4" name="fieldIds" type="checkbox" value={field.id} />
-              <span>
-                {field.municipality} Fg. {field.cadastralSheet} Map. {field.cadastralParcel}
-              </span>
-            </label>
-          ))}
-        </div>
-        <p className="mt-3 text-xs text-muted-foreground">
-          Se scegli un gruppo, i campi del gruppo restano comunque noti al sistema. Puoi
-          aggiungere campi singoli solo quando serve.
-        </p>
-      </fieldset>
-
-      <div className="grid gap-4 lg:grid-cols-3">
+      <div className="grid gap-4 lg:grid-cols-2">
         <label className="text-sm font-medium">
           Quantita&apos;
           <input
             className="focus-ring mt-2 h-10 w-full rounded-[8px] border border-input bg-background px-3"
             inputMode="decimal"
             name="quantity"
+            defaultValue={operation?.quantity ? String(operation.quantity) : ""}
           />
         </label>
         <label className="text-sm font-medium">
@@ -118,14 +137,7 @@ export async function OperationForm() {
             className="focus-ring mt-2 h-10 w-full rounded-[8px] border border-input bg-background px-3"
             name="quantityUnit"
             placeholder="kg, l, q..."
-          />
-        </label>
-        <label className="text-sm font-medium">
-          Superficie trattata ha
-          <input
-            className="focus-ring mt-2 h-10 w-full rounded-[8px] border border-input bg-background px-3"
-            inputMode="decimal"
-            name="treatedAreaHa"
+            defaultValue={operation?.quantityUnit ?? ""}
           />
         </label>
       </div>
@@ -135,6 +147,7 @@ export async function OperationForm() {
         <input
           className="focus-ring mt-2 h-10 w-full rounded-[8px] border border-input bg-background px-3"
           name="treatmentReason"
+          defaultValue={operation?.treatmentReason ?? ""}
         />
       </label>
 
@@ -143,6 +156,7 @@ export async function OperationForm() {
         <textarea
           className="focus-ring mt-2 min-h-24 w-full rounded-[8px] border border-input bg-background px-3 py-2"
           name="notes"
+          defaultValue={operation?.notes ?? ""}
         />
       </label>
 
@@ -163,7 +177,7 @@ export async function OperationForm() {
       </fieldset>
 
       <div className="flex justify-end">
-        <Button type="submit">Crea lavorazione</Button>
+        <Button type="submit">{operation ? "Salva lavorazione" : "Crea lavorazione"}</Button>
       </div>
     </form>
   );

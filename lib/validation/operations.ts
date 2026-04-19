@@ -5,8 +5,8 @@ const optionalDecimal = z
   .trim()
   .optional()
   .transform((value) => value?.replace(",", ".") || undefined)
-  .refine((value) => value === undefined || /^\d+(\.\d{1,3})?$/.test(value), {
-    message: "Inserire un numero positivo con massimo 3 decimali."
+  .refine((value) => value === undefined || /^\d+(\.\d{1,4})?$/.test(value), {
+    message: "Inserire un numero positivo con massimo 4 decimali."
   });
 
 export const operationFormSchema = z.object({

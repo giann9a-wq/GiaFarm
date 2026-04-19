@@ -30,6 +30,60 @@ function requireDateInsideCampaign(date: Date, campaign: { startsOn: Date; endsO
   }
 }
 
+async function maxAllowedAreaHa(input: { fieldGroupId?: string; fieldIds: string[] }) {
+  const group = input.fieldGroupId
+    ? await prisma.fieldGroup.findUnique({
+        where: { id: input.fieldGroupId },
+        include: {
+          memberships: { include: { field: { include: { usageHistory: true } } } }
+        }
+      })
+    : null;
+  const directFields =
+    input.fieldIds.length > 0
+      ? await prisma.field.findMany({
+          where: { id: { in: input.fieldIds } },
+          include: { usageHistory: true }
+        })
+      : [];
+
+  const fieldMap = new Map<string, { usageHistory: { year: number; usedAreaSqm: unknown }[] }>();
+  for (const membership of group?.memberships ?? []) {
+    fieldMap.set(membership.field.id, membership.field);
+  }
+  for (const field of directFields) {
+    fieldMap.set(field.id, field);
+  }
+
+  return (
+    Array.from(fieldMap.values()).reduce((sum, field) => {
+      const latest = field.usageHistory.slice().sort((a, b) => b.year - a.year)[0];
+      return sum + (latest ? Number(latest.usedAreaSqm) : 0);
+    }, 0) / 10000
+  );
+}
+
+async function validateOperationArea(input: {
+  treatedAreaHa?: string;
+  fieldGroupId?: string;
+  fieldIds: string[];
+}) {
+  if (input.treatedAreaHa !== undefined && Number(input.treatedAreaHa) < 0) {
+    throw new Error("La superficie trattata non puo' essere negativa.");
+  }
+
+  const maxAreaHa = await maxAllowedAreaHa(input);
+  if (
+    input.treatedAreaHa !== undefined &&
+    maxAreaHa > 0 &&
+    Number(input.treatedAreaHa) > maxAreaHa
+  ) {
+    throw new Error(
+      `La superficie trattata non puo' superare la superficie coltivata (${maxAreaHa.toFixed(4)} ha).`
+    );
+  }
+}
+
 export async function createOperationAction(formData: FormData) {
   const session = await requireUser();
   const parsed = operationFormSchema.parse({
@@ -55,9 +109,6 @@ export async function createOperationAction(formData: FormData) {
   if (parsed.quantity !== undefined && Number(parsed.quantity) <= 0) {
     throw new Error("La quantita' deve essere positiva.");
   }
-  if (parsed.treatedAreaHa !== undefined && Number(parsed.treatedAreaHa) < 0) {
-    throw new Error("La superficie trattata non puo' essere negativa.");
-  }
 
   const campaign = await prisma.campaign.findUniqueOrThrow({
     where: { id: parsed.campaignId }
@@ -80,6 +131,11 @@ export async function createOperationAction(formData: FormData) {
   if (group?.endsOn && parsed.performedOn > group.endsOn) {
     throw new Error("La lavorazione e' successiva alla fine del gruppo selezionato.");
   }
+  await validateOperationArea({
+    treatedAreaHa: parsed.treatedAreaHa,
+    fieldGroupId: parsed.fieldGroupId,
+    fieldIds: parsed.fieldIds
+  });
 
   const operation = await prisma.operation.create({
     data: {
@@ -143,6 +199,126 @@ export async function createOperationAction(formData: FormData) {
   redirect(`/lavorazioni/${operation.id}`);
 }
 
+export async function updateOperationAction(operationId: string, formData: FormData) {
+  const session = await requireUser();
+  const parsed = operationFormSchema.parse({
+    campaignId: stringValue(formData, "campaignId"),
+    operationTypeId: stringValue(formData, "operationTypeId"),
+    performedOn: `${stringValue(formData, "performedOn")}T00:00:00.000Z`,
+    fieldGroupId: stringValue(formData, "fieldGroupId") || undefined,
+    fieldIds: selectedValues(formData, "fieldIds"),
+    productMaterialId: stringValue(formData, "productMaterialId") || undefined,
+    quantity: stringValue(formData, "quantity") || undefined,
+    quantityUnit: stringValue(formData, "quantityUnit") || undefined,
+    treatedAreaHa: stringValue(formData, "treatedAreaHa") || undefined,
+    treatmentReason: stringValue(formData, "treatmentReason") || undefined,
+    notes: stringValue(formData, "notes") || undefined,
+    attachmentName: stringValue(formData, "attachmentName") || undefined,
+    attachmentDriveFileId: stringValue(formData, "attachmentDriveFileId") || undefined,
+    attachmentUrl: stringValue(formData, "attachmentUrl") || undefined
+  });
+
+  if (!parsed.fieldGroupId && parsed.fieldIds.length === 0) {
+    throw new Error("Selezionare almeno un gruppo o un campo.");
+  }
+  if (parsed.quantity !== undefined && Number(parsed.quantity) <= 0) {
+    throw new Error("La quantita' deve essere positiva.");
+  }
+
+  const before = await prisma.operation.findUniqueOrThrow({
+    where: { id: operationId },
+    include: { fieldGroups: true, fields: true, attachments: true }
+  });
+  const campaign = await prisma.campaign.findUniqueOrThrow({ where: { id: parsed.campaignId } });
+  requireDateInsideCampaign(parsed.performedOn, campaign);
+
+  const group = parsed.fieldGroupId
+    ? await prisma.fieldGroup.findUniqueOrThrow({ where: { id: parsed.fieldGroupId } })
+    : null;
+  if (group && group.campaignId !== parsed.campaignId) {
+    throw new Error("Il gruppo selezionato non appartiene alla campagna scelta.");
+  }
+  if (group?.startsOn && parsed.performedOn < group.startsOn) {
+    throw new Error("La lavorazione e' precedente all'inizio del gruppo selezionato.");
+  }
+  if (group?.endsOn && parsed.performedOn > group.endsOn) {
+    throw new Error("La lavorazione e' successiva alla fine del gruppo selezionato.");
+  }
+  await validateOperationArea({
+    treatedAreaHa: parsed.treatedAreaHa,
+    fieldGroupId: parsed.fieldGroupId,
+    fieldIds: parsed.fieldIds
+  });
+
+  const after = await prisma.$transaction(async (tx) => {
+    await tx.operationFieldGroup.deleteMany({ where: { operationId } });
+    await tx.operationField.deleteMany({ where: { operationId } });
+
+    return tx.operation.update({
+      where: { id: operationId },
+      data: {
+        campaignId: parsed.campaignId,
+        operationTypeId: parsed.operationTypeId,
+        performedOn: parsed.performedOn,
+        productMaterialId: parsed.productMaterialId || null,
+        quantity: parsed.quantity,
+        quantityUnit: parsed.quantityUnit || null,
+        treatedAreaHa: parsed.treatedAreaHa,
+        treatmentReason: parsed.treatmentReason || null,
+        notes: parsed.notes || null,
+        fieldGroups: parsed.fieldGroupId
+          ? { create: [{ fieldGroupId: parsed.fieldGroupId }] }
+          : undefined,
+        fields:
+          parsed.fieldIds.length > 0
+            ? { create: parsed.fieldIds.map((fieldId) => ({ fieldId })) }
+            : undefined
+      }
+    });
+  });
+
+  await writeAuditLog({
+    actorUserId: session.user?.id,
+    action: "OPERATION_UPDATED",
+    entityType: "Operation",
+    entityId: operationId,
+    before,
+    after
+  });
+
+  revalidatePath("/lavorazioni");
+  revalidatePath(`/lavorazioni/${operationId}`);
+  redirect(`/lavorazioni/${operationId}`);
+}
+
+export async function deleteOperationAction(operationId: string) {
+  const session = await requireUser();
+  const before = await prisma.operation.findUniqueOrThrow({
+    where: { id: operationId },
+    include: { fieldGroups: true, fields: true, attachments: true }
+  });
+
+  await prisma.$transaction([
+    prisma.warehouseMovement.deleteMany({ where: { operationId } }),
+    prisma.calendarEvent.deleteMany({ where: { operationId } }),
+    prisma.operationAttachment.deleteMany({ where: { operationId } }),
+    prisma.operationFieldGroup.deleteMany({ where: { operationId } }),
+    prisma.operationField.deleteMany({ where: { operationId } }),
+    prisma.operation.delete({ where: { id: operationId } })
+  ]);
+
+  await writeAuditLog({
+    actorUserId: session.user?.id,
+    action: "OPERATION_DELETED",
+    entityType: "Operation",
+    entityId: operationId,
+    before
+  });
+
+  revalidatePath("/lavorazioni");
+  redirect("/lavorazioni");
+}
+
 export async function createFieldGroupAction(formData: FormData) {
   const session = await requireUser();
   const parsed = fieldGroupFormSchema.parse({
@@ -186,6 +362,35 @@ export async function createFieldGroupAction(formData: FormData) {
     entityId: group.id,
     after: group,
     metadata: { fieldIds: parsed.fieldIds }
+  });
+
+  revalidatePath("/lavorazioni");
+  revalidatePath("/lavorazioni/gruppi");
+  redirect("/lavorazioni/gruppi");
+}
+
+export async function deleteFieldGroupAction(fieldGroupId: string) {
+  const session = await requireUser();
+  const before = await prisma.fieldGroup.findUniqueOrThrow({
+    where: { id: fieldGroupId },
+    include: { memberships: true, operations: true }
+  });
+
+  if (before.operations.length > 0) {
+    throw new Error("Non puoi eliminare un gruppo collegato a lavorazioni. Elimina o sposta prima le lavorazioni.");
+  }
+
+  await prisma.$transaction([
+    prisma.fieldGroupMembership.deleteMany({ where: { fieldGroupId } }),
+    prisma.fieldGroup.delete({ where: { id: fieldGroupId } })
+  ]);
+
+  await writeAuditLog({
+    actorUserId: session.user?.id,
+    action: "FIELD_GROUP_DELETED",
+    entityType: "FieldGroup",
+    entityId: fieldGroupId,
+    before
   });
 
   revalidatePath("/lavorazioni");

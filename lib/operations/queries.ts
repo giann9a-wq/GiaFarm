@@ -14,11 +14,16 @@ export async function getOperationsFiltersData() {
   const [campaigns, groups, fields, operationTypes, products, crops] = await Promise.all([
     prisma.campaign.findMany({ orderBy: { startsOn: "desc" } }),
     prisma.fieldGroup.findMany({
-      include: { campaign: true, crop: true, memberships: { include: { field: true } } },
+      include: {
+        campaign: true,
+        crop: true,
+        memberships: { include: { field: { include: { usageHistory: true } } } }
+      },
       orderBy: [{ campaign: { startsOn: "desc" } }, { name: "asc" }]
     }),
     prisma.field.findMany({
       where: { deletedAt: null },
+      include: { usageHistory: true },
       orderBy: [{ municipality: "asc" }, { cadastralSheet: "asc" }, { cadastralParcel: "asc" }]
     }),
     prisma.operationType.findMany({ orderBy: [{ category: "asc" }, { name: "asc" }] }),
@@ -84,15 +89,50 @@ export async function getOperationDetail(id: string) {
           fieldGroup: {
             include: {
               crop: true,
-              memberships: { include: { field: true } }
+              memberships: { include: { field: { include: { usageHistory: true } } } }
             }
           }
         }
       },
-      fields: { include: { field: true } },
+      fields: { include: { field: { include: { usageHistory: true } } } },
       attachments: { include: { driveFile: true } }
     }
   });
+}
+
+export async function getOperationFormData(operationId?: string) {
+  const [filtersData, operation] = await Promise.all([
+    getOperationsFiltersData(),
+    operationId ? getOperationDetail(operationId) : Promise.resolve(null)
+  ]);
+
+  return { ...filtersData, operation };
+}
+
+export function latestUsedAreaSqm(field: { usageHistory: { year: number; usedAreaSqm: unknown }[] }) {
+  const latest = field.usageHistory.slice().sort((a, b) => b.year - a.year)[0];
+  return latest ? Number(latest.usedAreaSqm) : 0;
+}
+
+export function groupUsedAreaHa(group: {
+  memberships: { field: { usageHistory: { year: number; usedAreaSqm: unknown }[] } }[];
+}) {
+  return (
+    group.memberships.reduce((sum, membership) => {
+      return sum + latestUsedAreaSqm(membership.field);
+    }, 0) / 10000
+  );
+}
+
+export function fieldsUsedAreaHa(
+  fields: { id: string; usageHistory: { year: number; usedAreaSqm: unknown }[] }[],
+  fieldIds: string[]
+) {
+  return (
+    fields
+      .filter((field) => fieldIds.includes(field.id))
+      .reduce((sum, field) => sum + latestUsedAreaSqm(field), 0) / 10000
+  );
 }
 
 export async function getFieldGroupsList(campaignId?: string) {

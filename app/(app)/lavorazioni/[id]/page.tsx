@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { PageHeader } from "@/components/app/page-header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { deleteOperationAction } from "@/app/(app)/lavorazioni/actions";
 import { getOperationDetail } from "@/lib/operations/queries";
 import { formatCategory, formatDate, formatDecimal } from "@/lib/operations/format";
 
@@ -28,6 +29,16 @@ export default async function OperationDetailPage({
       <Button asChild variant="secondary">
         <Link href="/lavorazioni">Torna all&apos;elenco</Link>
       </Button>
+      <div className="flex flex-wrap gap-3">
+        <Button asChild>
+          <Link href={`/lavorazioni/${operation.id}/modifica`}>Modifica</Link>
+        </Button>
+        <form action={deleteOperationAction.bind(null, operation.id)}>
+          <Button type="submit" variant="secondary">
+            Elimina
+          </Button>
+        </form>
+      </div>
 
       <Card>
         <CardHeader>

@@ -3,7 +3,22 @@ import { PageHeader } from "@/components/app/page-header";
 import { Button } from "@/components/ui/button";
 import { OperationForm } from "@/app/(app)/lavorazioni/operation-form";
 
-export default function NewOperationPage() {
+export default async function NewOperationPage({
+  searchParams
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  const params = await searchParams;
+  const fieldGroupId = Array.isArray(params.fieldGroupId)
+    ? params.fieldGroupId[0]
+    : params.fieldGroupId;
+  const fieldIdsParam = params.fieldIds;
+  const fieldIds = Array.isArray(fieldIdsParam)
+    ? fieldIdsParam
+    : fieldIdsParam
+      ? fieldIdsParam.split(",")
+      : [];
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -13,7 +28,7 @@ export default function NewOperationPage() {
       <Button asChild variant="secondary">
         <Link href="/lavorazioni">Torna all&apos;elenco</Link>
       </Button>
-      <OperationForm />
+      <OperationForm defaultFieldGroupId={fieldGroupId} defaultFieldIds={fieldIds} />
     </div>
   );
 }
