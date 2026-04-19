@@ -178,11 +178,16 @@ async function main() {
 
   const group = await prisma.fieldGroup.upsert({
     where: { campaignId_name: { campaignId: campaign.id, name: "Mais Cornate" } },
-    update: {},
+    update: {
+      startsOn: new Date("2026-03-01T00:00:00.000Z"),
+      endsOn: new Date("2026-10-31T23:59:59.000Z")
+    },
     create: {
       name: "Mais Cornate",
       campaignId: campaign.id,
       cropId: crop.id,
+      startsOn: new Date("2026-03-01T00:00:00.000Z"),
+      endsOn: new Date("2026-10-31T23:59:59.000Z"),
       notes: "Gruppo campi demo modificabile per campagna."
     }
   });
@@ -203,12 +208,30 @@ async function main() {
     skipDuplicates: true
   });
 
+  await prisma.operationType.deleteMany({
+    where: {
+      name: { in: ["Semina", "Raccolta", "Trattamento fitosanitario", "Irrigazione"] },
+      operations: { none: {} }
+    }
+  });
+
   const operationTypes = [
-    ["Semina", OperationCategory.SOWING],
-    ["Raccolta", OperationCategory.HARVEST],
+    ["Semina principale", OperationCategory.SOWING],
+    ["Seconda semina", OperationCategory.SOWING],
+    ["Raccolta coltura", OperationCategory.HARVEST],
+    ["Aratura", OperationCategory.SOIL_PREPARATION],
     ["Erpicatura", OperationCategory.SOIL_PREPARATION],
-    ["Trattamento fitosanitario", OperationCategory.TREATMENT],
-    ["Irrigazione", OperationCategory.IRRIGATION]
+    ["Ripuntatura", OperationCategory.SOIL_PREPARATION],
+    ["Fresatura", OperationCategory.SOIL_PREPARATION],
+    ["Rullatura", OperationCategory.SOIL_PREPARATION],
+    ["Irrigazione meccanica", OperationCategory.IRRIGATION],
+    ["Diserbo", OperationCategory.TREATMENT],
+    ["Fungicida", OperationCategory.TREATMENT],
+    ["Insetticida", OperationCategory.TREATMENT],
+    ["Concimazione", OperationCategory.TREATMENT],
+    ["Fogliare", OperationCategory.TREATMENT],
+    ["Trattamento altro", OperationCategory.TREATMENT],
+    ["Altro", OperationCategory.OTHER]
   ] as const;
 
   for (const [name, category] of operationTypes) {
@@ -219,7 +242,7 @@ async function main() {
     });
   }
 
-  const seedProduct = await prisma.productMaterial.upsert({
+  await prisma.productMaterial.upsert({
     where: { name: "Semente mais demo" },
     update: {},
     create: {
@@ -250,52 +273,21 @@ async function main() {
     }
   });
 
-  const sowingType = await prisma.operationType.findUniqueOrThrow({ where: { name: "Semina" } });
-  const operation =
-    (await prisma.operation.findFirst({
-      where: { notes: "Record demo generato dal seed." }
-    })) ??
-    (await prisma.operation.create({
-      data: {
-        campaignId: campaign.id,
-        operationTypeId: sowingType.id,
-        performedOn: new Date("2026-03-28T08:30:00.000Z"),
-        productMaterialId: seedProduct.id,
-        quantity: 92,
-        quantityUnit: "kg",
-        treatedAreaHa: 4.01,
-        treatmentReason: "Semina primaverile",
-        notes: "Record demo generato dal seed.",
-        fieldGroups: {
-          create: [{ fieldGroupId: group.id }]
-        },
-        calendarEvents: {
-          create: {
-            title: "Semina Mais Cornate",
-            startsAt: new Date("2026-03-28T08:30:00.000Z"),
-            source: "SYSTEM"
-          }
-        }
-      }
-    }));
-
-  const existingWarehouseMovement = await prisma.warehouseMovement.findFirst({
-    where: { operationId: operation.id, source: "OPERATION" }
+  const dummyOperations = await prisma.operation.findMany({
+    where: { notes: "Record demo generato dal seed." },
+    select: { id: true }
   });
+  const dummyOperationIds = dummyOperations.map((operation) => operation.id);
 
-  if (!existingWarehouseMovement) {
-    await prisma.warehouseMovement.create({
-      data: {
-        productMaterialId: seedProduct.id,
-        movementType: "OUT",
-        source: "OPERATION",
-        sourceId: operation.id,
-        operationId: operation.id,
-        quantity: 92,
-        unit: "kg",
-        movedOn: new Date("2026-03-28T08:30:00.000Z"),
-        note: "Scarico demo da lavorazione."
-      }
+  if (dummyOperationIds.length > 0) {
+    await prisma.warehouseMovement.deleteMany({
+      where: { operationId: { in: dummyOperationIds } }
+    });
+    await prisma.calendarEvent.deleteMany({
+      where: { operationId: { in: dummyOperationIds } }
+    });
+    await prisma.operation.deleteMany({
+      where: { id: { in: dummyOperationIds } }
     });
   }
 }

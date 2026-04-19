@@ -236,6 +236,8 @@ model FieldGroup {
   name        String
   campaignId  String
   cropId      String?
+  startsOn    DateTime?
+  endsOn      DateTime?
   notes       String?
   campaign    Campaign               @relation(fields: [campaignId], references: [id], onDelete: Cascade)
   crop        Crop?                  @relation(fields: [cropId], references: [id])
@@ -246,6 +248,8 @@ model FieldGroup {
   updatedAt   DateTime               @updatedAt
 
   @@unique([campaignId, name])
+  @@index([campaignId])
+  @@index([cropId])
 }
 
 model FieldGroupMembership {

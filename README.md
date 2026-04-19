@@ -207,6 +207,20 @@ Il seed importa i campi iniziali in modo idempotente usando la chiave `comune + 
 
 L'eliminazione campi non e' ancora esposta in UI: andra' implementata come soft delete.
 
+## Modulo Lavorazioni
+
+Il modulo Lavorazioni usa dati reali da Prisma/Supabase.
+
+- `Campaign`: campagna agricola novembre/ottobre, ad esempio `Campagna 2025/26`, con stato `ACTIVE`.
+- `Crop`: anagrafica colture.
+- `FieldGroup`: gruppo annuale/ciclo colturale collegato a campagna e coltura, con periodo opzionale `startsOn`/`endsOn`.
+- `FieldGroupMembership`: campi assegnati al gruppo. Uno stesso campo puo' appartenere a piu' gruppi nella stessa campagna se i cicli sono distinti, ad esempio frumento autunnale e soia estiva.
+- `OperationType`: codifiche delle tipologie operative, divise in semina, raccolta, preparazione terreno, trattamenti, irrigazione e altro.
+- `Operation`: lavorazione reale con data, campagna, gruppo/campi, prodotto, quantita', superficie, motivo e note.
+- `OperationAttachment` + `DriveFile`: allegati PDF collegati a lavorazioni tramite metadati/link Drive.
+
+Il seed rimuove le vecchie lavorazioni demo create durante il bootstrap iniziale e mantiene solo le codifiche utili. Non crea nuove lavorazioni fittizie.
+
 ## Mappa campi
 
 MVP previsto:
