@@ -13,7 +13,7 @@ export function InboundPdfPanel() {
   }, [pdfUrl]);
 
   return (
-    <aside className="space-y-4 rounded-[8px] border border-border bg-card p-4 lg:sticky lg:top-6">
+    <aside className="space-y-4 rounded-[8px] border border-border bg-card p-4 2xl:sticky 2xl:top-6">
       <div>
         <h2 className="font-semibold">PDF bolla</h2>
         <p className="mt-1 text-sm text-muted-foreground">
@@ -40,7 +40,7 @@ export function InboundPdfPanel() {
 
       <input name="attachmentName" readOnly type="hidden" value={fileName} />
 
-      <div className="h-[70vh] overflow-hidden rounded-[8px] border border-border bg-muted">
+      <div className="h-[78vh] min-h-[760px] overflow-hidden rounded-[8px] border border-border bg-muted">
         {pdfUrl ? (
           <iframe className="h-full w-full" src={pdfUrl} title="Anteprima PDF bolla" />
         ) : (

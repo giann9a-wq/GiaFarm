@@ -7,7 +7,10 @@ export async function InboundDeliveryForm() {
   const { suppliers, products, units } = await getInboundFormData();
 
   return (
-    <form action={createInboundDeliveryNoteAction} className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_520px]">
+    <form
+      action={createInboundDeliveryNoteAction}
+      className="grid gap-6 2xl:grid-cols-[minmax(520px,0.48fr)_minmax(720px,0.52fr)]"
+    >
       <div className="space-y-6 rounded-[8px] border border-border bg-card p-5">
         <div className="grid gap-4 lg:grid-cols-4">
           <label className="text-sm font-medium">
