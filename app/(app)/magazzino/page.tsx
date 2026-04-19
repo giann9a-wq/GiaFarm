@@ -2,12 +2,15 @@ import Link from "next/link";
 import { PageHeader } from "@/components/app/page-header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
-import { getWarehouseOverview, signedMovementQuantity } from "@/lib/warehouse/queries";
+import {
+  getWarehouseOverview,
+  signedMovementQuantity,
+} from "@/lib/warehouse/queries";
 import {
   formatDate,
   formatDecimal,
   formatMovementSource,
-  formatMovementType
+  formatMovementType,
 } from "@/lib/warehouse/format";
 
 export default async function WarehousePage() {
@@ -39,23 +42,37 @@ export default async function WarehousePage() {
               {products.map((product) => {
                 const total = product.warehouseBalances.reduce(
                   (sum, balance) => sum + Number(balance.quantity),
-                  0
+                  0,
                 );
                 return (
                   <tr key={product.id}>
                     <td className="px-4 py-3 font-medium">{product.name}</td>
                     <td className="px-4 py-3">{product.category}</td>
-                    <td className="px-4 py-3">{formatDecimal(total)} {product.unit}</td>
+                    <td className="px-4 py-3">
+                      {formatDecimal(total)} {product.unit}
+                    </td>
                     <td className="px-4 py-3">
                       {product.warehouseBalances
                         .filter((balance) => balance.lot)
-                        .map((balance) => `${balance.lot}: ${formatDecimal(balance.quantity)}`)
+                        .map(
+                          (balance) =>
+                            `${balance.lot}: ${formatDecimal(balance.quantity)}`,
+                        )
                         .join(", ") || "-"}
                     </td>
                     <td className="px-4 py-3">
-                      <Button asChild variant="secondary">
-                        <Link href={`/magazzino/${product.id}`}>Dettaglio</Link>
-                      </Button>
+                      <div className="flex flex-wrap gap-2">
+                        <Button asChild variant="secondary">
+                          <Link href={`/magazzino/${product.id}`}>
+                            Dettaglio
+                          </Link>
+                        </Button>
+                        <Button asChild variant="secondary">
+                          <Link href={`/magazzino/${product.id}/modifica`}>
+                            Modifica
+                          </Link>
+                        </Button>
+                      </div>
                     </td>
                   </tr>
                 );
@@ -85,10 +102,15 @@ export default async function WarehousePage() {
                 <tr key={movement.id}>
                   <td className="px-4 py-3">{formatDate(movement.movedOn)}</td>
                   <td className="px-4 py-3">{movement.productMaterial.name}</td>
-                  <td className="px-4 py-3">{formatMovementType(movement.movementType)}</td>
-                  <td className="px-4 py-3">{formatMovementSource(movement.source)}</td>
                   <td className="px-4 py-3">
-                    {formatDecimal(signedMovementQuantity(movement))} {movement.unit}
+                    {formatMovementType(movement.movementType)}
+                  </td>
+                  <td className="px-4 py-3">
+                    {formatMovementSource(movement.source)}
+                  </td>
+                  <td className="px-4 py-3">
+                    {formatDecimal(signedMovementQuantity(movement))}{" "}
+                    {movement.unit}
                   </td>
                 </tr>
               ))}
