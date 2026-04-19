@@ -22,14 +22,21 @@ export const inboundDeliveryFormSchema = z.object({
   rows: z
     .array(
       z.object({
-        productMaterialId: z.string().min(1),
+        productMaterialId: z.string().optional(),
+        articleCode: z.string().trim().optional(),
         description: z.string().trim().optional(),
+        registrationNumber: z.string().trim().optional(),
         quantity: optionalDecimal.refine((value) => value !== undefined && Number(value) > 0, {
           message: "La quantita' deve essere positiva."
         }),
         unit: z.string().trim().min(1),
+        unitPrice: optionalDecimal,
+        lineAmount: optionalDecimal,
+        ciCode: z.string().trim().optional(),
         lot: z.string().trim().optional(),
         notes: z.string().trim().optional()
+      }).refine((row) => row.articleCode || row.description || row.productMaterialId, {
+        message: "Inserire almeno codice articolo o descrizione."
       })
     )
     .min(1)

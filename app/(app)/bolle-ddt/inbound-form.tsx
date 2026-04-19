@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { getInboundFormData } from "@/lib/warehouse/queries";
 
 export async function InboundDeliveryForm() {
-  const { suppliers, products, units } = await getInboundFormData();
+  const { suppliers, units } = await getInboundFormData();
 
   return (
     <form
@@ -36,43 +36,46 @@ export async function InboundDeliveryForm() {
           </label>
         </div>
 
-        <div className="overflow-hidden rounded-[8px] border border-border">
-          <table className="w-full text-sm">
+        <div className="overflow-x-auto rounded-[8px] border border-border">
+          <table className="min-w-[980px] w-full text-sm">
             <thead className="bg-muted text-xs uppercase text-muted-foreground">
               <tr>
-                <th className="px-3 py-3 text-left">Materiale</th>
+                <th className="px-3 py-3 text-left">Cod. Articolo</th>
                 <th className="px-3 py-3 text-left">Descrizione</th>
-                <th className="px-3 py-3 text-left">Quantita</th>
+                <th className="px-3 py-3 text-left">Nr. Reg.</th>
                 <th className="px-3 py-3 text-left">UM</th>
-                <th className="px-3 py-3 text-left">Lotto</th>
-                <th className="px-3 py-3 text-left">Note</th>
+                <th className="px-3 py-3 text-left">Quantita</th>
+                <th className="px-3 py-3 text-left">Prezzo</th>
+                <th className="px-3 py-3 text-left">Importo riga</th>
+                <th className="px-3 py-3 text-left">C.I.</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
               {Array.from({ length: 5 }, (_, index) => (
                 <tr key={index}>
                   <td className="px-3 py-2">
-                    <select className="focus-ring h-10 w-full rounded-[8px] border border-input bg-background px-3" name={`rows.${index}.productMaterialId`}>
-                      <option value="">-</option>
-                      {products.map((product) => (
-                        <option key={product.id} value={product.id}>{product.name}</option>
-                      ))}
-                    </select>
+                    <input className="focus-ring h-10 w-32 rounded-[8px] border border-input bg-background px-3" name={`rows.${index}.articleCode`} />
                   </td>
                   <td className="px-3 py-2">
-                    <input className="focus-ring h-10 w-full rounded-[8px] border border-input bg-background px-3" name={`rows.${index}.description`} />
+                    <input className="focus-ring h-10 w-64 rounded-[8px] border border-input bg-background px-3" name={`rows.${index}.description`} />
                   </td>
                   <td className="px-3 py-2">
-                    <input className="focus-ring h-10 w-28 rounded-[8px] border border-input bg-background px-3" inputMode="decimal" name={`rows.${index}.quantity`} />
+                    <input className="focus-ring h-10 w-24 rounded-[8px] border border-input bg-background px-3" name={`rows.${index}.registrationNumber`} />
                   </td>
                   <td className="px-3 py-2">
                     <input className="focus-ring h-10 w-20 rounded-[8px] border border-input bg-background px-3" list="units" name={`rows.${index}.unit`} />
                   </td>
                   <td className="px-3 py-2">
-                    <input className="focus-ring h-10 w-28 rounded-[8px] border border-input bg-background px-3" name={`rows.${index}.lot`} />
+                    <input className="focus-ring h-10 w-24 rounded-[8px] border border-input bg-background px-3" inputMode="decimal" name={`rows.${index}.quantity`} />
                   </td>
                   <td className="px-3 py-2">
-                    <input className="focus-ring h-10 w-full rounded-[8px] border border-input bg-background px-3" name={`rows.${index}.notes`} />
+                    <input className="focus-ring h-10 w-24 rounded-[8px] border border-input bg-background px-3" inputMode="decimal" name={`rows.${index}.unitPrice`} />
+                  </td>
+                  <td className="px-3 py-2">
+                    <input className="focus-ring h-10 w-28 rounded-[8px] border border-input bg-background px-3" inputMode="decimal" name={`rows.${index}.lineAmount`} />
+                  </td>
+                  <td className="px-3 py-2">
+                    <input className="focus-ring h-10 w-16 rounded-[8px] border border-input bg-background px-3" name={`rows.${index}.ciCode`} />
                   </td>
                 </tr>
               ))}

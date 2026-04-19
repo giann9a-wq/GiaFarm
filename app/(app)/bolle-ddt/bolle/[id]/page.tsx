@@ -49,24 +49,34 @@ export default async function InboundDeliveryDetailPage({
         <CardHeader>
           <h2 className="font-semibold">Materiali e movimenti generati</h2>
         </CardHeader>
-        <CardContent className="p-0">
-          <table className="w-full text-sm">
+        <CardContent className="overflow-x-auto p-0">
+          <table className="min-w-[980px] w-full text-sm">
             <thead className="bg-muted text-xs uppercase text-muted-foreground">
               <tr>
-                <th className="px-4 py-3 text-left">Materiale</th>
+                <th className="px-4 py-3 text-left">Cod. Articolo</th>
                 <th className="px-4 py-3 text-left">Descrizione</th>
+                <th className="px-4 py-3 text-left">Nr. Reg.</th>
+                <th className="px-4 py-3 text-left">UM</th>
                 <th className="px-4 py-3 text-left">Quantita</th>
-                <th className="px-4 py-3 text-left">Lotto</th>
+                <th className="px-4 py-3 text-left">Prezzo</th>
+                <th className="px-4 py-3 text-left">Importo riga</th>
+                <th className="px-4 py-3 text-left">C.I.</th>
+                <th className="px-4 py-3 text-left">Materiale GiaFarm</th>
                 <th className="px-4 py-3 text-left">Movimenti</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
               {note.rows.map((row) => (
                 <tr key={row.id}>
-                  <td className="px-4 py-3">{row.productMaterial.name}</td>
+                  <td className="px-4 py-3">{row.articleCode ?? "-"}</td>
                   <td className="px-4 py-3">{row.description ?? "-"}</td>
-                  <td className="px-4 py-3">{formatDecimal(row.quantity)} {row.unit}</td>
-                  <td className="px-4 py-3">{row.lot ?? "-"}</td>
+                  <td className="px-4 py-3">{row.registrationNumber ?? "-"}</td>
+                  <td className="px-4 py-3">{row.unit}</td>
+                  <td className="px-4 py-3">{formatDecimal(row.quantity)}</td>
+                  <td className="px-4 py-3">{formatDecimal(row.unitPrice, 4)}</td>
+                  <td className="px-4 py-3">{formatDecimal(row.lineAmount, 2)}</td>
+                  <td className="px-4 py-3">{row.ciCode ?? "-"}</td>
+                  <td className="px-4 py-3">{row.productMaterial.name}</td>
                   <td className="px-4 py-3">
                     {row.warehouseMovements.map((movement) => (
                       <span key={movement.id}>

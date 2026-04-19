@@ -436,9 +436,14 @@ model InboundDeliveryRow {
   id                    String              @id @default(cuid())
   inboundDeliveryNoteId String
   productMaterialId     String
+  articleCode           String?
   description           String?
+  registrationNumber    String?
   quantity              Decimal             @db.Decimal(12, 3)
   unit                  String
+  unitPrice             Decimal?            @db.Decimal(12, 4)
+  lineAmount            Decimal?            @db.Decimal(12, 2)
+  ciCode                String?
   lot                   String?
   notes                 String?
   inboundDeliveryNote   InboundDeliveryNote @relation(fields: [inboundDeliveryNoteId], references: [id], onDelete: Cascade)

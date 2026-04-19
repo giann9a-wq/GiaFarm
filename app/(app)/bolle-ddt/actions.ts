@@ -30,20 +30,30 @@ function optionalDateTimeValue(formData: FormData, key: string) {
 function parseRows(formData: FormData, prefix: string, maxRows = 5) {
   return Array.from({ length: maxRows }, (_, index) => {
     const productMaterialId = stringValue(formData, `${prefix}.${index}.productMaterialId`);
+    const articleCode = stringValue(formData, `${prefix}.${index}.articleCode`);
     const description = stringValue(formData, `${prefix}.${index}.description`);
+    const registrationNumber = stringValue(formData, `${prefix}.${index}.registrationNumber`);
     const quantity = stringValue(formData, `${prefix}.${index}.quantity`);
     const unit = stringValue(formData, `${prefix}.${index}.unit`);
+    const unitPrice = stringValue(formData, `${prefix}.${index}.unitPrice`);
+    const lineAmount = stringValue(formData, `${prefix}.${index}.lineAmount`);
+    const ciCode = stringValue(formData, `${prefix}.${index}.ciCode`);
     const lot = stringValue(formData, `${prefix}.${index}.lot`);
     const notes = stringValue(formData, `${prefix}.${index}.notes`);
     return {
       productMaterialId: productMaterialId || undefined,
+      articleCode: articleCode || undefined,
       description: description || undefined,
+      registrationNumber: registrationNumber || undefined,
       quantity: quantity || undefined,
       unit,
+      unitPrice: unitPrice || undefined,
+      lineAmount: lineAmount || undefined,
+      ciCode: ciCode || undefined,
       lot: lot || undefined,
       notes: notes || undefined
     };
-  }).filter((row) => row.productMaterialId || row.description || row.quantity);
+  }).filter((row) => row.productMaterialId || row.articleCode || row.description || row.quantity);
 }
 
 async function upsertDriveFile(input: {
@@ -107,41 +117,65 @@ export async function createInboundDeliveryNoteAction(formData: FormData) {
         internalRecipient: parsed.internalRecipient || null,
         status: "ISSUED",
         notes: parsed.notes || null,
-        driveFileId: driveFile?.id || null,
-        rows: {
-          create: parsed.rows.map((row) => ({
-            productMaterial: { connect: { id: row.productMaterialId } },
-            description: row.description || null,
-            quantity: row.quantity!,
-            unit: row.unit,
-            lot: row.lot || null,
-            notes: row.notes || null
-          }))
-        }
-      },
-      include: { rows: true }
+        driveFileId: driveFile?.id || null
+      }
     });
 
-    for (const row of inbound.rows) {
+    const rows = [];
+    for (const row of parsed.rows) {
+      const productMaterial = row.productMaterialId
+        ? await tx.productMaterial.findUniqueOrThrow({ where: { id: row.productMaterialId } })
+        : await tx.productMaterial.upsert({
+            where: { name: row.description || row.articleCode || "Materiale bolla" },
+            update: {
+              code: row.articleCode || undefined,
+              unit: row.unit,
+              active: true
+            },
+            create: {
+              name: row.description || row.articleCode || "Materiale bolla",
+              code: row.articleCode || null,
+              category: "Materiale da bolla",
+              unit: row.unit,
+              notes: "Creato automaticamente da bolla in ingresso."
+            }
+          });
+      const inboundRow = await tx.inboundDeliveryRow.create({
+        data: {
+          inboundDeliveryNoteId: inbound.id,
+          productMaterialId: productMaterial.id,
+          articleCode: row.articleCode || null,
+          description: row.description || null,
+          registrationNumber: row.registrationNumber || null,
+          quantity: row.quantity!,
+          unit: row.unit,
+          unitPrice: row.unitPrice || null,
+          lineAmount: row.lineAmount || null,
+          ciCode: row.ciCode || null,
+          lot: row.lot || null,
+          notes: row.notes || null
+        }
+      });
+      rows.push(inboundRow);
       await recordWarehouseMovement(
         {
-          productMaterialId: row.productMaterialId,
+          productMaterialId: inboundRow.productMaterialId,
           movementType: WarehouseMovementType.IN,
           source: WarehouseMovementSource.BOLLA_IN,
           sourceId: inbound.id,
-          inboundDeliveryRowId: row.id,
+          inboundDeliveryRowId: inboundRow.id,
           actorUserId,
-          quantity: row.quantity,
-          unit: row.unit,
+          quantity: inboundRow.quantity,
+          unit: inboundRow.unit,
           movedOn: parsed.issuedOn,
-          lot: row.lot,
+          lot: inboundRow.lot,
           note: `Bolla ingresso ${inbound.number}`
         },
         tx
       );
     }
 
-    return inbound;
+    return { ...inbound, rows };
   });
 
   await writeAuditLog({
