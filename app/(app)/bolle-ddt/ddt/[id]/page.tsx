@@ -4,10 +4,14 @@ import { PageHeader } from "@/components/app/page-header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { getOutboundDdt } from "@/lib/warehouse/queries";
-import { formatDate, formatDateTime, formatDecimal } from "@/lib/warehouse/format";
+import {
+  formatDate,
+  formatDateTime,
+  formatDecimal,
+} from "@/lib/warehouse/format";
 
 export default async function OutboundDdtDetailPage({
-  params
+  params,
 }: {
   params: Promise<{ id: string }>;
 }) {
@@ -21,9 +25,14 @@ export default async function OutboundDdtDetailPage({
         title={`DDT ${ddt.number}`}
         subtitle={`${formatDate(ddt.issuedOn)} - ${ddt.kind === "WAREHOUSE" ? "Da magazzino" : "Free text / raccolto"}`}
       />
-      <Button asChild variant="secondary">
-        <Link href="/bolle-ddt">Torna a Bolle / DDT</Link>
-      </Button>
+      <div className="flex flex-wrap gap-3">
+        <Button asChild variant="secondary">
+          <Link href="/bolle-ddt">Torna a Bolle / DDT</Link>
+        </Button>
+        <Button asChild>
+          <Link href={`/bolle-ddt/ddt/${ddt.id}/modifica`}>Modifica DDT</Link>
+        </Button>
+      </div>
 
       <section className="rounded-[8px] border border-border bg-white p-8 text-sm text-black print:border-0 print:p-0">
         <div className="flex justify-between gap-6 border-b border-black pb-4">
@@ -51,10 +60,20 @@ export default async function OutboundDdtDetailPage({
         </div>
 
         <div className="mt-4 grid gap-3 md:grid-cols-4">
-          <p><span className="font-bold">Causale:</span> {ddt.transportReason ?? "-"}</p>
-          <p><span className="font-bold">Aspetto:</span> {ddt.packageAppearance ?? "-"}</p>
-          <p><span className="font-bold">Colli:</span> {ddt.packageCount ?? "-"}</p>
-          <p><span className="font-bold">Mezzo:</span> {ddt.transportedBy ?? "-"}</p>
+          <p>
+            <span className="font-bold">Causale:</span>{" "}
+            {ddt.transportReason ?? "-"}
+          </p>
+          <p>
+            <span className="font-bold">Aspetto:</span>{" "}
+            {ddt.packageAppearance ?? "-"}
+          </p>
+          <p>
+            <span className="font-bold">Colli:</span> {ddt.packageCount ?? "-"}
+          </p>
+          <p>
+            <span className="font-bold">Mezzo:</span> {ddt.transportedBy ?? "-"}
+          </p>
         </div>
 
         <table className="mt-4 w-full border-collapse">
@@ -74,7 +93,9 @@ export default async function OutboundDdtDetailPage({
                   {row.description}
                   {row.productMaterial ? ` - ${row.productMaterial.name}` : ""}
                 </td>
-                <td className="border border-black p-2">{formatDecimal(row.quantity)}</td>
+                <td className="border border-black p-2">
+                  {formatDecimal(row.quantity)}
+                </td>
                 <td className="border border-black p-2">{row.unit}</td>
               </tr>
             ))}
@@ -82,9 +103,18 @@ export default async function OutboundDdtDetailPage({
         </table>
 
         <div className="mt-4 grid gap-3 md:grid-cols-3">
-          <p><span className="font-bold">Data/ora trasporto:</span> {formatDateTime(ddt.transportStartsAt)}</p>
-          <p><span className="font-bold">Firma conducente:</span> {ddt.driverSignature ?? ""}</p>
-          <p><span className="font-bold">Firma destinatario:</span> {ddt.recipientSignature ?? ""}</p>
+          <p>
+            <span className="font-bold">Data/ora trasporto:</span>{" "}
+            {formatDateTime(ddt.transportStartsAt)}
+          </p>
+          <p>
+            <span className="font-bold">Firma conducente:</span>{" "}
+            {ddt.driverSignature ?? ""}
+          </p>
+          <p>
+            <span className="font-bold">Firma destinatario:</span>{" "}
+            {ddt.recipientSignature ?? ""}
+          </p>
         </div>
       </section>
 
@@ -101,8 +131,11 @@ export default async function OutboundDdtDetailPage({
             <div className="space-y-2">
               {ddt.rows.map((row) => (
                 <p className="text-sm" key={row.id}>
-                  {row.productMaterial?.name ?? row.description}: {formatDecimal(row.quantity)} {row.unit}
-                  {row.warehouseMovements.length > 0 ? " scaricati" : " senza movimento"}
+                  {row.productMaterial?.name ?? row.description}:{" "}
+                  {formatDecimal(row.quantity)} {row.unit}
+                  {row.warehouseMovements.length > 0
+                    ? " scaricati"
+                    : " senza movimento"}
                 </p>
               ))}
             </div>

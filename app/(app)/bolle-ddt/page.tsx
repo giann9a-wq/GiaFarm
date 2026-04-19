@@ -77,15 +77,31 @@ export default async function DeliveryNotesPage() {
                 <tr key={note.id}>
                   <td className="px-4 py-3">{formatDate(note.issuedOn)}</td>
                   <td className="px-4 py-3 font-medium">{note.number}</td>
-                  <td className="px-4 py-3">{note.supplier?.businessName ?? "-"}</td>
+                  <td className="px-4 py-3">
+                    {note.supplier?.businessName ?? "-"}
+                  </td>
                   <td className="px-4 py-3">{note.rows.length}</td>
                   <td className="px-4 py-3">
-                    {formatDecimal(note.rows.reduce((sum, row) => sum + Number(row.quantity), 0))}
+                    {formatDecimal(
+                      note.rows.reduce(
+                        (sum, row) => sum + Number(row.quantity),
+                        0,
+                      ),
+                    )}
                   </td>
                   <td className="px-4 py-3">
-                    <Button asChild variant="secondary">
-                      <Link href={`/bolle-ddt/bolle/${note.id}`}>Dettaglio</Link>
-                    </Button>
+                    <div className="flex flex-wrap gap-2">
+                      <Button asChild variant="secondary">
+                        <Link href={`/bolle-ddt/bolle/${note.id}`}>
+                          Dettaglio
+                        </Link>
+                      </Button>
+                      <Button asChild variant="secondary">
+                        <Link href={`/bolle-ddt/bolle/${note.id}/modifica`}>
+                          Modifica
+                        </Link>
+                      </Button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -123,14 +139,25 @@ export default async function DeliveryNotesPage() {
                   <td className="px-4 py-3">{formatDate(ddt.issuedOn)}</td>
                   <td className="px-4 py-3 font-medium">{ddt.number}</td>
                   <td className="px-4 py-3">
-                    {ddt.kind === "WAREHOUSE" ? "Da magazzino" : "Free text / raccolto"}
+                    {ddt.kind === "WAREHOUSE"
+                      ? "Da magazzino"
+                      : "Free text / raccolto"}
                   </td>
-                  <td className="px-4 py-3">{ddt.customer?.businessName ?? "-"}</td>
+                  <td className="px-4 py-3">
+                    {ddt.customer?.businessName ?? "-"}
+                  </td>
                   <td className="px-4 py-3">{ddt.rows.length}</td>
                   <td className="px-4 py-3">
-                    <Button asChild variant="secondary">
-                      <Link href={`/bolle-ddt/ddt/${ddt.id}`}>Dettaglio</Link>
-                    </Button>
+                    <div className="flex flex-wrap gap-2">
+                      <Button asChild variant="secondary">
+                        <Link href={`/bolle-ddt/ddt/${ddt.id}`}>Dettaglio</Link>
+                      </Button>
+                      <Button asChild variant="secondary">
+                        <Link href={`/bolle-ddt/ddt/${ddt.id}/modifica`}>
+                          Modifica
+                        </Link>
+                      </Button>
+                    </div>
                   </td>
                 </tr>
               ))}

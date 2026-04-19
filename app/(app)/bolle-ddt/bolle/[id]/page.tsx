@@ -4,10 +4,14 @@ import { PageHeader } from "@/components/app/page-header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { getInboundDeliveryNote } from "@/lib/warehouse/queries";
-import { formatDate, formatDecimal, formatMovementType } from "@/lib/warehouse/format";
+import {
+  formatDate,
+  formatDecimal,
+  formatMovementType,
+} from "@/lib/warehouse/format";
 
 export default async function InboundDeliveryDetailPage({
-  params
+  params,
 }: {
   params: Promise<{ id: string }>;
 }) {
@@ -24,20 +28,42 @@ export default async function InboundDeliveryDetailPage({
       <Button asChild variant="secondary">
         <Link href="/bolle-ddt">Torna a Bolle / DDT</Link>
       </Button>
+      <Button asChild>
+        <Link href={`/bolle-ddt/bolle/${note.id}/modifica`}>
+          Modifica bolla
+        </Link>
+      </Button>
 
       <Card>
         <CardHeader>
           <h2 className="font-semibold">Dati documento</h2>
         </CardHeader>
         <CardContent className="grid gap-4 md:grid-cols-2">
-          <p><span className="font-medium">Numero:</span> {note.number}</p>
-          <p><span className="font-medium">Data:</span> {formatDate(note.issuedOn)}</p>
-          <p><span className="font-medium">Fornitore:</span> {note.supplier?.businessName ?? "-"}</p>
-          <p><span className="font-medium">Destinatario interno:</span> {note.internalRecipient ?? "-"}</p>
-          <p className="md:col-span-2"><span className="font-medium">Note:</span> {note.notes ?? "-"}</p>
+          <p>
+            <span className="font-medium">Numero:</span> {note.number}
+          </p>
+          <p>
+            <span className="font-medium">Data:</span>{" "}
+            {formatDate(note.issuedOn)}
+          </p>
+          <p>
+            <span className="font-medium">Fornitore:</span>{" "}
+            {note.supplier?.businessName ?? "-"}
+          </p>
+          <p>
+            <span className="font-medium">Destinatario interno:</span>{" "}
+            {note.internalRecipient ?? "-"}
+          </p>
+          <p className="md:col-span-2">
+            <span className="font-medium">Note:</span> {note.notes ?? "-"}
+          </p>
           {note.driveFile?.webViewLink ? (
             <p className="md:col-span-2">
-              <a className="font-semibold text-primary" href={note.driveFile.webViewLink} target="_blank">
+              <a
+                className="font-semibold text-primary"
+                href={note.driveFile.webViewLink}
+                target="_blank"
+              >
                 Apri PDF allegato
               </a>
             </p>
@@ -73,14 +99,19 @@ export default async function InboundDeliveryDetailPage({
                   <td className="px-4 py-3">{row.registrationNumber ?? "-"}</td>
                   <td className="px-4 py-3">{row.unit}</td>
                   <td className="px-4 py-3">{formatDecimal(row.quantity)}</td>
-                  <td className="px-4 py-3">{formatDecimal(row.unitPrice, 4)}</td>
-                  <td className="px-4 py-3">{formatDecimal(row.lineAmount, 2)}</td>
+                  <td className="px-4 py-3">
+                    {formatDecimal(row.unitPrice, 4)}
+                  </td>
+                  <td className="px-4 py-3">
+                    {formatDecimal(row.lineAmount, 2)}
+                  </td>
                   <td className="px-4 py-3">{row.ciCode ?? "-"}</td>
                   <td className="px-4 py-3">{row.productMaterial.name}</td>
                   <td className="px-4 py-3">
                     {row.warehouseMovements.map((movement) => (
                       <span key={movement.id}>
-                        {formatMovementType(movement.movementType)} {formatDecimal(movement.quantity)}
+                        {formatMovementType(movement.movementType)}{" "}
+                        {formatDecimal(movement.quantity)}
                       </span>
                     ))}
                   </td>
