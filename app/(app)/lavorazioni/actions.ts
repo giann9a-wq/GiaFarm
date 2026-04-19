@@ -10,7 +10,6 @@ import { writeAuditLog } from "@/lib/audit";
 import { prisma } from "@/lib/prisma";
 import { fieldGroupFormSchema, operationFormSchema } from "@/lib/validation/operations";
 import {
-  assertAvailableStock,
   rebuildWarehouseBalances,
   recordWarehouseMovement
 } from "@/lib/warehouse/stock";
@@ -171,14 +170,6 @@ async function createOperation(
     fieldGroupId: parsed.fieldGroupId,
     fieldIds: parsed.fieldIds
   });
-  if (parsed.productMaterialId && parsed.quantity) {
-    await assertAvailableStock({
-      productMaterialId: parsed.productMaterialId,
-      quantity: parsed.quantity,
-      label: "Il materiale selezionato"
-    });
-  }
-
   const operation = await prisma.operation.create({
     data: {
       campaignId: parsed.campaignId,
@@ -321,25 +312,6 @@ async function updateOperation(
     fieldGroupId: parsed.fieldGroupId,
     fieldIds: parsed.fieldIds
   });
-  if (parsed.productMaterialId && parsed.quantity) {
-    const currentMovementQuantity = before.productMaterialId === parsed.productMaterialId
-      ? Number(before.quantity ?? 0)
-      : 0;
-    const availableAdjustment = currentMovementQuantity > 0 ? currentMovementQuantity : 0;
-    const available = await prisma.warehouseMovement.findMany({
-      where: { productMaterialId: parsed.productMaterialId },
-      select: { movementType: true, quantity: true }
-    });
-    const currentAvailable = available.reduce((sum, movement) => {
-      return sum + (movement.movementType === WarehouseMovementType.OUT ? -Number(movement.quantity) : Number(movement.quantity));
-    }, 0) + availableAdjustment;
-    if (Number(parsed.quantity) > currentAvailable) {
-      throw new Error(
-        `Il materiale selezionato non ha giacenza sufficiente: disponibili ${currentAvailable.toFixed(3)}.`
-      );
-    }
-  }
-
   const after = await prisma.$transaction(async (tx) => {
     await tx.operationFieldGroup.deleteMany({ where: { operationId } });
     await tx.operationField.deleteMany({ where: { operationId } });
