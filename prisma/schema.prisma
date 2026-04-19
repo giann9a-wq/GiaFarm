@@ -56,6 +56,11 @@ enum WarehouseMovementSource {
   OPERATION
   MANUAL_ADJUSTMENT
   OPENING_BALANCE
+  BOLLA_IN
+  LAVORAZIONE_OUT
+  DDT_OUT
+  RETTIFICA_ADMIN
+  ALTRO
 }
 
 enum WarehouseMovementType {
@@ -81,19 +86,25 @@ enum GmailImportStatus {
   ERROR
 }
 
+enum OutboundDdtKind {
+  WAREHOUSE
+  FREE_TEXT
+}
+
 model User {
-  id            String     @id @default(cuid())
-  name          String?
-  email         String?    @unique
-  emailVerified DateTime?
-  image         String?
-  isActive      Boolean    @default(true)
-  roles         Role[]
-  accounts      Account[]
-  sessions      Session[]
-  auditLogs     AuditLog[]
-  createdAt     DateTime   @default(now())
-  updatedAt     DateTime   @updatedAt
+  id                 String              @id @default(cuid())
+  name               String?
+  email              String?             @unique
+  emailVerified      DateTime?
+  image              String?
+  isActive           Boolean             @default(true)
+  roles              Role[]
+  accounts           Account[]
+  sessions           Session[]
+  auditLogs          AuditLog[]
+  warehouseMovements WarehouseMovement[]
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
 }
 
 model Role {
@@ -341,9 +352,18 @@ model ProductMaterial {
   inboundRows        InboundDeliveryRow[]
   outboundRows       OutboundDdtRow[]
   warehouseMovements WarehouseMovement[]
+  warehouseBalances  WarehouseBalance[]
   documents          ProductDocument[]
   createdAt          DateTime             @default(now())
   updatedAt          DateTime             @updatedAt
+}
+
+model UnitOfMeasure {
+  id        String   @id @default(cuid())
+  code      String   @unique
+  label     String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model Supplier {
@@ -369,16 +389,32 @@ model Customer {
   phone          String?
   address        String?
   notes          String?
+  destinations   DdtDestination[]
   outboundDdt    OutboundDdt[]
   financeRevenue FinanceRevenue[]
   createdAt      DateTime         @default(now())
   updatedAt      DateTime         @updatedAt
 }
 
+model DdtDestination {
+  id          String        @id @default(cuid())
+  customerId  String?
+  name        String
+  address     String?
+  notes       String?
+  customer    Customer?     @relation(fields: [customerId], references: [id])
+  outboundDdt OutboundDdt[]
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  @@unique([customerId, name, address])
+}
+
 model InboundDeliveryNote {
   id                   String               @id @default(cuid())
   supplierId           String?
   number               String
+  internalRecipient    String?
   issuedOn             DateTime
   receivedOn           DateTime?
   status               DdtStatus            @default(DRAFT)
@@ -392,6 +428,7 @@ model InboundDeliveryNote {
   createdAt            DateTime             @default(now())
   updatedAt            DateTime             @updatedAt
 
+  @@unique([supplierId, number, issuedOn])
   @@index([issuedOn])
 }
 
@@ -399,60 +436,111 @@ model InboundDeliveryRow {
   id                    String              @id @default(cuid())
   inboundDeliveryNoteId String
   productMaterialId     String
+  description           String?
   quantity              Decimal             @db.Decimal(12, 3)
   unit                  String
   lot                   String?
+  notes                 String?
   inboundDeliveryNote   InboundDeliveryNote @relation(fields: [inboundDeliveryNoteId], references: [id], onDelete: Cascade)
   productMaterial       ProductMaterial     @relation(fields: [productMaterialId], references: [id])
+  warehouseMovements    WarehouseMovement[]
 }
 
 model OutboundDdt {
-  id          String           @id @default(cuid())
-  customerId  String?
-  number      String
-  issuedOn    DateTime
-  status      DdtStatus        @default(DRAFT)
-  notes       String?
-  driveFileId String?
-  customer    Customer?        @relation(fields: [customerId], references: [id])
-  driveFile   DriveFile?       @relation(fields: [driveFileId], references: [id])
-  rows        OutboundDdtRow[]
-  createdAt   DateTime         @default(now())
-  updatedAt   DateTime         @updatedAt
+  id                 String           @id @default(cuid())
+  kind               OutboundDdtKind  @default(WAREHOUSE)
+  customerId         String?
+  destinationId      String?
+  number             String
+  sequenceYear       Int
+  sequenceNumber     Int
+  issuedOn           DateTime
+  status             DdtStatus        @default(ISSUED)
+  senderHeading      String?
+  recipientSnapshot  Json?
+  destinationText    String?
+  transportReason    String?
+  packageAppearance  String?
+  packageCount       String?
+  transportedBy      String?
+  transportStartsAt  DateTime?
+  driverSignature    String?
+  recipientSignature String?
+  notes              String?
+  driveFileId        String?
+  customer           Customer?        @relation(fields: [customerId], references: [id])
+  destination        DdtDestination?  @relation(fields: [destinationId], references: [id])
+  driveFile          DriveFile?       @relation(fields: [driveFileId], references: [id])
+  rows               OutboundDdtRow[]
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
 
   @@unique([number])
+  @@unique([sequenceYear, sequenceNumber])
   @@index([issuedOn])
 }
 
 model OutboundDdtRow {
-  id                String          @id @default(cuid())
-  outboundDdtId     String
-  productMaterialId String
-  description       String?
-  quantity          Decimal         @db.Decimal(12, 3)
-  unit              String
-  outboundDdt       OutboundDdt     @relation(fields: [outboundDdtId], references: [id], onDelete: Cascade)
-  productMaterial   ProductMaterial @relation(fields: [productMaterialId], references: [id])
+  id                 String              @id @default(cuid())
+  outboundDdtId      String
+  productMaterialId  String?
+  description        String
+  quantity           Decimal             @db.Decimal(12, 3)
+  unit               String
+  lot                String?
+  notes              String?
+  outboundDdt        OutboundDdt         @relation(fields: [outboundDdtId], references: [id], onDelete: Cascade)
+  productMaterial    ProductMaterial?    @relation(fields: [productMaterialId], references: [id])
+  warehouseMovements WarehouseMovement[]
+}
+
+model DdtNumberSequence {
+  id        String   @id @default(cuid())
+  year      Int      @unique
+  nextValue Int      @default(1)
+  prefix    String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model WarehouseMovement {
-  id                String                  @id @default(cuid())
-  productMaterialId String
-  movementType      WarehouseMovementType
-  source            WarehouseMovementSource
-  sourceId          String?
-  operationId       String?
-  quantity          Decimal                 @db.Decimal(12, 3)
-  unit              String
-  movedOn           DateTime
-  note              String?
-  productMaterial   ProductMaterial         @relation(fields: [productMaterialId], references: [id])
-  operation         Operation?              @relation(fields: [operationId], references: [id])
-  adjustment        WarehouseAdjustment?
-  createdAt         DateTime                @default(now())
+  id                   String                  @id @default(cuid())
+  productMaterialId    String
+  movementType         WarehouseMovementType
+  source               WarehouseMovementSource
+  sourceId             String?
+  operationId          String?
+  inboundDeliveryRowId String?
+  outboundDdtRowId     String?
+  actorUserId          String?
+  lot                  String?
+  quantity             Decimal                 @db.Decimal(12, 3)
+  unit                 String
+  movedOn              DateTime
+  note                 String?
+  productMaterial      ProductMaterial         @relation(fields: [productMaterialId], references: [id])
+  operation            Operation?              @relation(fields: [operationId], references: [id])
+  inboundDeliveryRow   InboundDeliveryRow?     @relation(fields: [inboundDeliveryRowId], references: [id])
+  outboundDdtRow       OutboundDdtRow?         @relation(fields: [outboundDdtRowId], references: [id])
+  actor                User?                   @relation(fields: [actorUserId], references: [id])
+  adjustment           WarehouseAdjustment?
+  createdAt            DateTime                @default(now())
 
   @@index([movedOn])
   @@index([productMaterialId])
+  @@index([source, sourceId])
+}
+
+model WarehouseBalance {
+  id                String          @id @default(cuid())
+  productMaterialId String
+  lot               String?
+  quantity          Decimal         @default(0) @db.Decimal(12, 3)
+  unit              String
+  productMaterial   ProductMaterial @relation(fields: [productMaterialId], references: [id], onDelete: Cascade)
+  updatedAt         DateTime        @updatedAt
+
+  @@unique([productMaterialId, lot])
 }
 
 model WarehouseAdjustment {

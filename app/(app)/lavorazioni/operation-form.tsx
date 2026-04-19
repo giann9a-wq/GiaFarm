@@ -12,12 +12,14 @@ type OperationFormProps = {
   operationId?: string;
   defaultFieldGroupId?: string;
   defaultFieldIds?: string[];
+  actionError?: string;
 };
 
 export async function OperationForm({
   operationId,
   defaultFieldGroupId,
-  defaultFieldIds = []
+  defaultFieldIds = [],
+  actionError
 }: OperationFormProps) {
   const { campaigns, groups, fields, operationTypes, products, operation } =
     await getOperationFormData(operationId);
@@ -50,6 +52,12 @@ export async function OperationForm({
 
   return (
     <form action={action} className="space-y-6 rounded-[8px] border border-border bg-card p-5">
+      {actionError ? (
+        <div className="rounded-[8px] border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+          {actionError}
+        </div>
+      ) : null}
+
       <div className="grid gap-4 lg:grid-cols-3">
         <label className="text-sm font-medium">
           Campagna

@@ -244,7 +244,7 @@ async function main() {
 
   await prisma.productMaterial.upsert({
     where: { name: "Semente mais demo" },
-    update: {},
+    update: { active: true },
     create: {
       name: "Semente mais demo",
       category: "Semente",
@@ -252,6 +252,42 @@ async function main() {
       notes: "Materiale demo per magazzino e lavorazioni."
     }
   });
+
+  const units = [
+    ["kg", "Chilogrammi"],
+    ["l", "Litri"],
+    ["q", "Quintali"],
+    ["t", "Tonnellate"],
+    ["pz", "Pezzi"]
+  ] as const;
+
+  for (const [code, label] of units) {
+    await prisma.unitOfMeasure.upsert({
+      where: { code },
+      update: { label },
+      create: { code, label }
+    });
+  }
+
+  const supportMaterials = [
+    ["Concime organico pellettato", "Concime", "kg"],
+    ["Diserbante selettivo", "Agrofarmaco", "l"],
+    ["Semente soia", "Semente", "kg"],
+    ["Gasolio agricolo", "Carburante", "l"]
+  ] as const;
+
+  for (const [name, category, unit] of supportMaterials) {
+    await prisma.productMaterial.upsert({
+      where: { name },
+      update: { category, unit, active: true },
+      create: {
+        name,
+        category,
+        unit,
+        notes: "Materiale di supporto per Bolle, Lavorazioni e Magazzino."
+      }
+    });
+  }
 
   await prisma.supplier.upsert({
     where: { id: "supplier-demo" },
@@ -270,6 +306,22 @@ async function main() {
       id: "customer-demo",
       businessName: "Cliente Cereali Demo",
       email: "cliente@example.com"
+    }
+  });
+
+  await prisma.ddtDestination.upsert({
+    where: {
+      customerId_name_address: {
+        customerId: "customer-demo",
+        name: "Centro raccolta demo",
+        address: "Destinazione demo"
+      }
+    },
+    update: {},
+    create: {
+      customerId: "customer-demo",
+      name: "Centro raccolta demo",
+      address: "Destinazione demo"
     }
   });
 

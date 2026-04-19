@@ -9,6 +9,7 @@ export default async function NewOperationPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const params = await searchParams;
+  const error = Array.isArray(params.error) ? params.error[0] : params.error;
   const fieldGroupId = Array.isArray(params.fieldGroupId)
     ? params.fieldGroupId[0]
     : params.fieldGroupId;
@@ -28,7 +29,11 @@ export default async function NewOperationPage({
       <Button asChild variant="secondary">
         <Link href="/lavorazioni">Torna all&apos;elenco</Link>
       </Button>
-      <OperationForm defaultFieldGroupId={fieldGroupId} defaultFieldIds={fieldIds} />
+      <OperationForm
+        actionError={error}
+        defaultFieldGroupId={fieldGroupId}
+        defaultFieldIds={fieldIds}
+      />
     </div>
   );
 }

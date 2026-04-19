@@ -1,12 +1,19 @@
 "use server";
 
-import { DocumentModule } from "@prisma/client";
+import { DocumentModule, WarehouseMovementSource, WarehouseMovementType } from "@prisma/client";
+import { isRedirectError } from "next/dist/client/components/redirect-error";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { ZodError } from "zod";
 import { requireUser } from "@/lib/auth/permissions";
 import { writeAuditLog } from "@/lib/audit";
 import { prisma } from "@/lib/prisma";
 import { fieldGroupFormSchema, operationFormSchema } from "@/lib/validation/operations";
+import {
+  assertAvailableStock,
+  rebuildWarehouseBalances,
+  recordWarehouseMovement
+} from "@/lib/warehouse/stock";
 
 function stringValue(formData: FormData, key: string) {
   return String(formData.get(key) ?? "").trim();
@@ -22,6 +29,23 @@ function selectedValues(formData: FormData, key: string) {
     .getAll(key)
     .map((value) => String(value))
     .filter(Boolean);
+}
+
+function actionErrorMessage(error: unknown) {
+  if (error instanceof ZodError) {
+    return error.issues[0]?.message ?? "Controllare i dati inseriti.";
+  }
+  if (error instanceof Error && error.message) {
+    return error.message;
+  }
+  return "Impossibile salvare la lavorazione. Controllare i dati e riprovare.";
+}
+
+function redirectWithActionError(path: string, error: unknown): never {
+  if (isRedirectError(error)) {
+    throw error;
+  }
+  redirect(`${path}?error=${encodeURIComponent(actionErrorMessage(error))}`);
 }
 
 function requireDateInsideCampaign(date: Date, campaign: { startsOn: Date; endsOn: Date }) {
@@ -86,6 +110,17 @@ async function validateOperationArea(input: {
 
 export async function createOperationAction(formData: FormData) {
   const session = await requireUser();
+  try {
+    await createOperation(formData, session);
+  } catch (error) {
+    redirectWithActionError("/lavorazioni/nuova", error);
+  }
+}
+
+async function createOperation(
+  formData: FormData,
+  session: Awaited<ReturnType<typeof requireUser>>
+) {
   const parsed = operationFormSchema.parse({
     campaignId: stringValue(formData, "campaignId"),
     operationTypeId: stringValue(formData, "operationTypeId"),
@@ -136,6 +171,13 @@ export async function createOperationAction(formData: FormData) {
     fieldGroupId: parsed.fieldGroupId,
     fieldIds: parsed.fieldIds
   });
+  if (parsed.productMaterialId && parsed.quantity) {
+    await assertAvailableStock({
+      productMaterialId: parsed.productMaterialId,
+      quantity: parsed.quantity,
+      label: "Il materiale selezionato"
+    });
+  }
 
   const operation = await prisma.operation.create({
     data: {
@@ -157,6 +199,24 @@ export async function createOperationAction(formData: FormData) {
           : undefined
     }
   });
+
+  if (parsed.productMaterialId && parsed.quantity) {
+    const product = await prisma.productMaterial.findUniqueOrThrow({
+      where: { id: parsed.productMaterialId }
+    });
+    await recordWarehouseMovement({
+      productMaterialId: parsed.productMaterialId,
+      movementType: WarehouseMovementType.OUT,
+      source: WarehouseMovementSource.LAVORAZIONE_OUT,
+      sourceId: operation.id,
+      operationId: operation.id,
+      actorUserId: session.user?.id,
+      quantity: parsed.quantity,
+      unit: parsed.quantityUnit || product.unit,
+      movedOn: parsed.performedOn,
+      note: "Scarico automatico da lavorazione"
+    });
+  }
 
   if (parsed.attachmentName || parsed.attachmentDriveFileId || parsed.attachmentUrl) {
     const googleDriveFileId =
@@ -201,6 +261,18 @@ export async function createOperationAction(formData: FormData) {
 
 export async function updateOperationAction(operationId: string, formData: FormData) {
   const session = await requireUser();
+  try {
+    await updateOperation(operationId, formData, session);
+  } catch (error) {
+    redirectWithActionError(`/lavorazioni/${operationId}/modifica`, error);
+  }
+}
+
+async function updateOperation(
+  operationId: string,
+  formData: FormData,
+  session: Awaited<ReturnType<typeof requireUser>>
+) {
   const parsed = operationFormSchema.parse({
     campaignId: stringValue(formData, "campaignId"),
     operationTypeId: stringValue(formData, "operationTypeId"),
@@ -249,12 +321,33 @@ export async function updateOperationAction(operationId: string, formData: FormD
     fieldGroupId: parsed.fieldGroupId,
     fieldIds: parsed.fieldIds
   });
+  if (parsed.productMaterialId && parsed.quantity) {
+    const currentMovementQuantity = before.productMaterialId === parsed.productMaterialId
+      ? Number(before.quantity ?? 0)
+      : 0;
+    const availableAdjustment = currentMovementQuantity > 0 ? currentMovementQuantity : 0;
+    const available = await prisma.warehouseMovement.findMany({
+      where: { productMaterialId: parsed.productMaterialId },
+      select: { movementType: true, quantity: true }
+    });
+    const currentAvailable = available.reduce((sum, movement) => {
+      return sum + (movement.movementType === WarehouseMovementType.OUT ? -Number(movement.quantity) : Number(movement.quantity));
+    }, 0) + availableAdjustment;
+    if (Number(parsed.quantity) > currentAvailable) {
+      throw new Error(
+        `Il materiale selezionato non ha giacenza sufficiente: disponibili ${currentAvailable.toFixed(3)}.`
+      );
+    }
+  }
 
   const after = await prisma.$transaction(async (tx) => {
     await tx.operationFieldGroup.deleteMany({ where: { operationId } });
     await tx.operationField.deleteMany({ where: { operationId } });
+    await tx.warehouseMovement.deleteMany({
+      where: { operationId, source: WarehouseMovementSource.LAVORAZIONE_OUT }
+    });
 
-    return tx.operation.update({
+    const updatedOperation = await tx.operation.update({
       where: { id: operationId },
       data: {
         campaignId: parsed.campaignId,
@@ -275,6 +368,30 @@ export async function updateOperationAction(operationId: string, formData: FormD
             : undefined
       }
     });
+
+    if (parsed.productMaterialId && parsed.quantity) {
+      const product = await tx.productMaterial.findUniqueOrThrow({
+        where: { id: parsed.productMaterialId }
+      });
+      await recordWarehouseMovement(
+        {
+          productMaterialId: parsed.productMaterialId,
+          movementType: WarehouseMovementType.OUT,
+          source: WarehouseMovementSource.LAVORAZIONE_OUT,
+          sourceId: operationId,
+          operationId,
+          actorUserId: session.user?.id,
+          quantity: parsed.quantity,
+          unit: parsed.quantityUnit || product.unit,
+          movedOn: parsed.performedOn,
+          note: "Scarico automatico da lavorazione"
+        },
+        tx
+      );
+    }
+
+    await rebuildWarehouseBalances(tx);
+    return updatedOperation;
   });
 
   await writeAuditLog({
@@ -298,14 +415,15 @@ export async function deleteOperationAction(operationId: string) {
     include: { fieldGroups: true, fields: true, attachments: true }
   });
 
-  await prisma.$transaction([
-    prisma.warehouseMovement.deleteMany({ where: { operationId } }),
-    prisma.calendarEvent.deleteMany({ where: { operationId } }),
-    prisma.operationAttachment.deleteMany({ where: { operationId } }),
-    prisma.operationFieldGroup.deleteMany({ where: { operationId } }),
-    prisma.operationField.deleteMany({ where: { operationId } }),
-    prisma.operation.delete({ where: { id: operationId } })
-  ]);
+  await prisma.$transaction(async (tx) => {
+    await tx.warehouseMovement.deleteMany({ where: { operationId } });
+    await tx.calendarEvent.deleteMany({ where: { operationId } });
+    await tx.operationAttachment.deleteMany({ where: { operationId } });
+    await tx.operationFieldGroup.deleteMany({ where: { operationId } });
+    await tx.operationField.deleteMany({ where: { operationId } });
+    await tx.operation.delete({ where: { id: operationId } });
+    await rebuildWarehouseBalances(tx);
+  });
 
   await writeAuditLog({
     actorUserId: session.user?.id,

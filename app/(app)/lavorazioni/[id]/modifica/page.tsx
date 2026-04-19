@@ -6,11 +6,15 @@ import { OperationForm } from "@/app/(app)/lavorazioni/operation-form";
 import { getOperationDetail } from "@/lib/operations/queries";
 
 export default async function EditOperationPage({
-  params
+  params,
+  searchParams
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const { id } = await params;
+  const query = await searchParams;
+  const error = Array.isArray(query.error) ? query.error[0] : query.error;
   const operation = await getOperationDetail(id);
   if (!operation) notFound();
 
@@ -23,7 +27,7 @@ export default async function EditOperationPage({
       <Button asChild variant="secondary">
         <Link href={`/lavorazioni/${id}`}>Torna al dettaglio</Link>
       </Button>
-      <OperationForm operationId={id} />
+      <OperationForm actionError={error} operationId={id} />
     </div>
   );
 }
