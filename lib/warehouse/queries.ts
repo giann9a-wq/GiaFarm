@@ -82,18 +82,31 @@ export async function getInboundFormData() {
 }
 
 export async function getDdtFormData() {
-  const [customers, destinations, products, units, balances] = await Promise.all([
-    prisma.customer.findMany({ orderBy: { businessName: "asc" } }),
+  const [customers, destinations, products, units, balances, fieldProductSuggestions] = await Promise.all([
+    prisma.customer.findMany({
+      include: { destinations: { orderBy: { name: "asc" } } },
+      orderBy: { businessName: "asc" }
+    }),
     prisma.ddtDestination.findMany({
       include: { customer: true },
       orderBy: [{ name: "asc" }]
     }),
     prisma.productMaterial.findMany({ where: { active: true }, orderBy: { name: "asc" } }),
     prisma.unitOfMeasure.findMany({ orderBy: { code: "asc" } }),
-    prisma.warehouseBalance.findMany({ include: { productMaterial: true } })
+    prisma.warehouseBalance.findMany({ include: { productMaterial: true } }),
+    prisma.outboundDdtRow.findMany({
+      where: {
+        productMaterialId: null,
+        description: { not: "" },
+        outboundDdt: { kind: "FREE_TEXT" }
+      },
+      distinct: ["description"],
+      orderBy: { description: "asc" },
+      select: { description: true }
+    })
   ]);
 
-  return { customers, destinations, products, units, balances };
+  return { customers, destinations, products, units, balances, fieldProductSuggestions };
 }
 
 export async function getWarehouseOverview() {

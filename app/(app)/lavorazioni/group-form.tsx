@@ -36,7 +36,7 @@ export async function FieldGroupForm({ mode = "create", defaults }: FieldGroupFo
       campaigns={campaigns.map((campaign) => ({ id: campaign.id, name: campaign.name }))}
       crops={crops.map((crop) => ({ id: crop.id, name: crop.name }))}
       defaultCampaignId={defaults?.campaignId ?? activeCampaign?.id}
-      defaultCropId={defaults?.cropId}
+      defaultCropName={crops.find((crop) => crop.id === defaults?.cropId)?.name ?? ""}
       defaultEndsOn={dateInputValue(defaults?.endsOn)}
       defaultFieldIds={Array.from(selectedFieldIds)}
       defaultName={

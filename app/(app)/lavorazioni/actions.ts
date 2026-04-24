@@ -78,6 +78,7 @@ function actionErrorField(error: unknown) {
   if (message.includes("inizio")) return "startsOn";
   if (message.includes("fine")) return "endsOn";
   if (message.includes("nome")) return "name";
+  if (message.includes("coltura")) return "cropName";
   return undefined;
 }
 
@@ -542,6 +543,7 @@ export async function createFieldGroupAction(
       campaignId: stringValue(formData, "campaignId"),
       name: stringValue(formData, "name"),
       cropId: stringValue(formData, "cropId") || undefined,
+      cropName: stringValue(formData, "cropName") || undefined,
       startsOn: optionalDateValue(formData, "startsOn"),
       endsOn: optionalDateValue(formData, "endsOn"),
       fieldIds: selectedValues(formData, "fieldIds"),
@@ -556,12 +558,21 @@ export async function createFieldGroupAction(
     if (parsed.startsOn && parsed.endsOn && parsed.endsOn < parsed.startsOn) {
       throw new Error("La fine del gruppo non puo' precedere l'inizio.");
     }
+    const cropId = parsed.cropName
+      ? (
+          await prisma.crop.upsert({
+            where: { name: parsed.cropName },
+            update: {},
+            create: { name: parsed.cropName }
+          })
+        ).id
+      : parsed.cropId || null;
 
     const group = await prisma.fieldGroup.create({
       data: {
         campaignId: parsed.campaignId,
         name: parsed.name,
-        cropId: parsed.cropId || null,
+        cropId,
         startsOn: parsed.startsOn,
         endsOn: parsed.endsOn,
         notes: parsed.notes || null,
@@ -603,6 +614,7 @@ export async function updateFieldGroupAction(
       campaignId: stringValue(formData, "campaignId"),
       name: stringValue(formData, "name"),
       cropId: stringValue(formData, "cropId") || undefined,
+      cropName: stringValue(formData, "cropName") || undefined,
       startsOn: optionalDateValue(formData, "startsOn"),
       endsOn: optionalDateValue(formData, "endsOn"),
       fieldIds: selectedValues(formData, "fieldIds"),
@@ -624,6 +636,15 @@ export async function updateFieldGroupAction(
     if (parsed.startsOn && parsed.endsOn && parsed.endsOn < parsed.startsOn) {
       throw new Error("La fine del gruppo non puo' precedere l'inizio.");
     }
+    const cropId = parsed.cropName
+      ? (
+          await prisma.crop.upsert({
+            where: { name: parsed.cropName },
+            update: {},
+            create: { name: parsed.cropName }
+          })
+        ).id
+      : parsed.cropId || null;
 
     const after = await prisma.$transaction(async (tx) => {
       await tx.fieldGroupMembership.deleteMany({ where: { fieldGroupId } });
@@ -632,7 +653,7 @@ export async function updateFieldGroupAction(
         data: {
           campaignId: parsed.campaignId,
           name: parsed.name,
-          cropId: parsed.cropId || null,
+          cropId,
           startsOn: parsed.startsOn,
           endsOn: parsed.endsOn,
           notes: parsed.notes || null,

@@ -28,7 +28,7 @@ type GroupFormClientProps = {
   fields: FieldOption[];
   defaultCampaignId?: string;
   defaultName?: string;
-  defaultCropId?: string | null;
+  defaultCropName?: string | null;
   defaultStartsOn?: string;
   defaultEndsOn?: string;
   defaultFieldIds: string[];
@@ -43,7 +43,7 @@ export function GroupFormClient({
   fields,
   defaultCampaignId,
   defaultName,
-  defaultCropId,
+  defaultCropName,
   defaultStartsOn,
   defaultEndsOn,
   defaultFieldIds,
@@ -94,14 +94,18 @@ export function GroupFormClient({
         </label>
         <label className="text-sm font-medium">
           Coltura principale
-          <select className={inputClass("cropId")} defaultValue={defaultCropId ?? ""} name="cropId">
-            <option value="">Non definita</option>
+          <input
+            className={inputClass("cropName")}
+            defaultValue={defaultCropName ?? ""}
+            list="crop-suggestions"
+            name="cropName"
+            placeholder="Mais, Soia, Frumento..."
+          />
+          <datalist id="crop-suggestions">
             {crops.map((crop) => (
-              <option key={crop.id} value={crop.id}>
-                {crop.name}
-              </option>
+              <option key={crop.id} value={crop.name} />
             ))}
-          </select>
+          </datalist>
         </label>
       </div>
 

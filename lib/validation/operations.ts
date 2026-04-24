@@ -34,6 +34,7 @@ export const fieldGroupFormSchema = z.object({
   campaignId: z.string().min(1),
   name: z.string().trim().min(1),
   cropId: z.string().optional(),
+  cropName: z.string().trim().optional(),
   startsOn: z.coerce.date().optional(),
   endsOn: z.coerce.date().optional(),
   fieldIds: z.array(z.string()).default([]),
