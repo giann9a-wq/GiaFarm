@@ -50,3 +50,15 @@ select {
 .focus-ring {
   @apply outline-none ring-offset-2 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-background;
 }
+
+@keyframes giafarm-progress {
+  0% {
+    transform: translateX(-120%);
+  }
+  55% {
+    transform: translateX(80%);
+  }
+  100% {
+    transform: translateX(220%);
+  }
+}
