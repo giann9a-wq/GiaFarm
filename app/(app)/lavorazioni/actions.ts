@@ -552,6 +552,69 @@ export async function createFieldGroupAction(formData: FormData) {
   redirect("/lavorazioni/gruppi");
 }
 
+export async function updateFieldGroupAction(fieldGroupId: string, formData: FormData) {
+  const session = await requireUser();
+  const parsed = fieldGroupFormSchema.parse({
+    campaignId: stringValue(formData, "campaignId"),
+    name: stringValue(formData, "name"),
+    cropId: stringValue(formData, "cropId") || undefined,
+    startsOn: optionalDateValue(formData, "startsOn"),
+    endsOn: optionalDateValue(formData, "endsOn"),
+    fieldIds: selectedValues(formData, "fieldIds"),
+    notes: stringValue(formData, "notes") || undefined
+  });
+
+  const [before, campaign] = await Promise.all([
+    prisma.fieldGroup.findUniqueOrThrow({
+      where: { id: fieldGroupId },
+      include: { memberships: true }
+    }),
+    prisma.campaign.findUniqueOrThrow({
+      where: { id: parsed.campaignId }
+    })
+  ]);
+
+  if (parsed.startsOn) requireDateInsideCampaign(parsed.startsOn, campaign);
+  if (parsed.endsOn) requireDateInsideCampaign(parsed.endsOn, campaign);
+  if (parsed.startsOn && parsed.endsOn && parsed.endsOn < parsed.startsOn) {
+    throw new Error("La fine del gruppo non puo' precedere l'inizio.");
+  }
+
+  const after = await prisma.$transaction(async (tx) => {
+    await tx.fieldGroupMembership.deleteMany({ where: { fieldGroupId } });
+    return tx.fieldGroup.update({
+      where: { id: fieldGroupId },
+      data: {
+        campaignId: parsed.campaignId,
+        name: parsed.name,
+        cropId: parsed.cropId || null,
+        startsOn: parsed.startsOn,
+        endsOn: parsed.endsOn,
+        notes: parsed.notes || null,
+        memberships:
+          parsed.fieldIds.length > 0
+            ? { create: parsed.fieldIds.map((fieldId) => ({ fieldId })) }
+            : undefined
+      },
+      include: { memberships: true }
+    });
+  });
+
+  await writeAuditLog({
+    actorUserId: session.user?.id,
+    action: "FIELD_GROUP_UPDATED",
+    entityType: "FieldGroup",
+    entityId: fieldGroupId,
+    before,
+    after,
+    metadata: { fieldIds: parsed.fieldIds }
+  });
+
+  revalidatePath("/lavorazioni");
+  revalidatePath("/lavorazioni/gruppi");
+  redirect("/lavorazioni/gruppi");
+}
+
 export async function deleteFieldGroupAction(fieldGroupId: string) {
   const session = await requireUser();
   const before = await prisma.fieldGroup.findUniqueOrThrow({

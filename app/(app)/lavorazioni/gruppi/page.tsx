@@ -6,8 +6,25 @@ import { deleteFieldGroupAction } from "@/app/(app)/lavorazioni/actions";
 import { getFieldGroupsList } from "@/lib/operations/queries";
 import { formatDate, formatDecimal } from "@/lib/operations/format";
 
-export default async function FieldGroupsPage() {
+type FieldGroupsPageProps = {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+};
+
+function firstParam(value: string | string[] | undefined) {
+  return Array.isArray(value) ? value[0] : value;
+}
+
+export default async function FieldGroupsPage({ searchParams }: FieldGroupsPageProps) {
+  const params = await searchParams;
+  const mode = firstParam(params.mode);
+  const selectedGroupId = firstParam(params.id);
   const groups = await getFieldGroupsList();
+  const selectedGroup = selectedGroupId
+    ? groups.find((group) => group.id === selectedGroupId)
+    : undefined;
+  const formMode =
+    mode === "create" || mode === "edit" || mode === "duplicate" ? mode : undefined;
+  const canShowForm = formMode === "create" || Boolean(formMode && selectedGroup);
 
   return (
     <div className="space-y-6">
@@ -15,11 +32,38 @@ export default async function FieldGroupsPage() {
         title="Gruppi campi"
         subtitle="Gruppi annuali per campagna e coltura. Lo stesso campo puo' appartenere a gruppi diversi nello stesso anno se i cicli sono distinti."
       />
-      <Button asChild variant="secondary">
-        <Link href="/lavorazioni">Torna alle lavorazioni</Link>
-      </Button>
+      <div className="flex flex-wrap gap-3">
+        <Button asChild variant="secondary">
+          <Link href="/lavorazioni">Torna alle lavorazioni</Link>
+        </Button>
+        <Button asChild>
+          <Link href="/lavorazioni/gruppi?mode=create">Crea nuovo gruppo</Link>
+        </Button>
+      </div>
 
-      <FieldGroupForm />
+      {canShowForm ? (
+        <FieldGroupForm
+          mode={formMode}
+          defaults={
+            selectedGroup
+              ? {
+                  id: selectedGroup.id,
+                  campaignId: selectedGroup.campaignId,
+                  name: selectedGroup.name,
+                  cropId: selectedGroup.cropId,
+                  startsOn: selectedGroup.startsOn,
+                  endsOn: selectedGroup.endsOn,
+                  fieldIds: selectedGroup.memberships.map((membership) => membership.field.id),
+                  notes: selectedGroup.notes
+                }
+              : undefined
+          }
+        />
+      ) : formMode ? (
+        <div className="rounded-[8px] border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+          Gruppo non trovato. Torna all&apos;elenco e riprova.
+        </div>
+      ) : null}
 
       <div className="space-y-3">
         {groups.map((group) => {
@@ -55,6 +99,16 @@ export default async function FieldGroupsPage() {
                     <Button asChild>
                       <Link href={`/lavorazioni/nuova?fieldGroupId=${group.id}`}>
                         Nuova lavorazione
+                      </Link>
+                    </Button>
+                    <Button asChild variant="secondary">
+                      <Link href={`/lavorazioni/gruppi?mode=edit&id=${group.id}`}>
+                        Modifica
+                      </Link>
+                    </Button>
+                    <Button asChild variant="secondary">
+                      <Link href={`/lavorazioni/gruppi?mode=duplicate&id=${group.id}`}>
+                        Duplica
                       </Link>
                     </Button>
                     <form action={deleteFieldGroupAction.bind(null, group.id)}>
