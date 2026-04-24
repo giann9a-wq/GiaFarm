@@ -15,15 +15,19 @@ export const operationFormSchema = z.object({
   performedOn: z.coerce.date(),
   fieldGroupId: z.string().optional(),
   fieldIds: z.array(z.string()).default([]),
-  productMaterialId: z.string().optional(),
-  quantity: optionalDecimal,
-  quantityUnit: z.string().trim().optional(),
   treatedAreaHa: optionalDecimal,
   treatmentReason: z.string().trim().optional(),
   notes: z.string().trim().optional(),
-  attachmentName: z.string().trim().optional(),
-  attachmentDriveFileId: z.string().trim().optional(),
-  attachmentUrl: z.string().trim().url().optional().or(z.literal("").transform(() => undefined))
+  products: z
+    .array(
+      z.object({
+        productMaterialId: z.string().optional(),
+        quantity: optionalDecimal,
+        unit: z.string().trim().optional(),
+        note: z.string().trim().optional()
+      })
+    )
+    .default([])
 });
 
 export const fieldGroupFormSchema = z.object({

@@ -39,6 +39,9 @@ export function OperationAreaFields({
   const [treatedAreaHa, setTreatedAreaHa] = useState(defaultAreaHa);
 
   const fieldsById = useMemo(() => new Map(fields.map((field) => [field.id, field])), [fields]);
+  const selectedGroupFieldIds = useMemo(() => {
+    return new Set(groups.find((item) => item.id === selectedGroupId)?.fieldIds ?? []);
+  }, [groups, selectedGroupId]);
 
   function suggestedArea(groupId: string, fieldIds: string[]) {
     const group = groups.find((item) => item.id === groupId);
@@ -92,7 +95,8 @@ export function OperationAreaFields({
             <label className="flex items-center gap-2 text-sm" key={field.id}>
               <input
                 className="h-4 w-4"
-                checked={selectedFieldIds.includes(field.id)}
+                checked={selectedFieldIds.includes(field.id) || selectedGroupFieldIds.has(field.id)}
+                disabled={selectedGroupFieldIds.has(field.id)}
                 name="fieldIds"
                 type="checkbox"
                 value={field.id}

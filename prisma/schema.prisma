@@ -228,6 +228,7 @@ model Campaign {
   operations  Operation[]
   costs       FinanceCost[]
   revenues    FinanceRevenue[]
+  calendarEvents CalendarEvent[]
   createdAt   DateTime         @default(now())
   updatedAt   DateTime         @updatedAt
 }
@@ -255,6 +256,7 @@ model FieldGroup {
   memberships FieldGroupMembership[]
   operations  OperationFieldGroup[]
   allocations FinanceAllocation[]
+  calendarEvents CalendarEvent[]
   createdAt   DateTime               @default(now())
   updatedAt   DateTime               @updatedAt
 
@@ -301,6 +303,7 @@ model Operation {
   productMaterial    ProductMaterial?      @relation(fields: [productMaterialId], references: [id])
   fields             OperationField[]
   fieldGroups        OperationFieldGroup[]
+  materialUsages     OperationMaterialUsage[]
   attachments        OperationAttachment[]
   warehouseMovements WarehouseMovement[]
   calendarEvents     CalendarEvent[]
@@ -330,6 +333,21 @@ model OperationFieldGroup {
   @@unique([operationId, fieldGroupId])
 }
 
+model OperationMaterialUsage {
+  id                String          @id @default(cuid())
+  operationId       String
+  productMaterialId String
+  quantity          Decimal         @db.Decimal(12, 3)
+  unit              String
+  note              String?
+  operation         Operation       @relation(fields: [operationId], references: [id], onDelete: Cascade)
+  productMaterial   ProductMaterial @relation(fields: [productMaterialId], references: [id])
+  createdAt         DateTime        @default(now())
+
+  @@index([operationId])
+  @@index([productMaterialId])
+}
+
 model OperationAttachment {
   id          String    @id @default(cuid())
   operationId String
@@ -349,6 +367,7 @@ model ProductMaterial {
   active             Boolean              @default(true)
   notes              String?
   operations         Operation[]
+  operationMaterialUsages OperationMaterialUsage[]
   inboundRows        InboundDeliveryRow[]
   outboundRows       OutboundDdtRow[]
   warehouseMovements WarehouseMovement[]
@@ -562,6 +581,9 @@ model ProductDocument {
   productMaterialId String
   driveFileId       String
   documentType      String
+  purchasedOn       DateTime?
+  referenceNumber   String?
+  notes             String?
   validFrom         DateTime?
   validTo           DateTime?
   productMaterial   ProductMaterial @relation(fields: [productMaterialId], references: [id], onDelete: Cascade)
@@ -574,8 +596,10 @@ model FinanceCost {
   supplierId  String?
   campaignId  String?
   occurredOn  DateTime
+  documentNumber String?
   category    String
   description String
+  taxableAmount Decimal?          @db.Decimal(12, 2)
   amount      Decimal             @db.Decimal(12, 2)
   vatAmount   Decimal?            @db.Decimal(12, 2)
   driveFileId String?
@@ -592,8 +616,10 @@ model FinanceRevenue {
   customerId  String?
   campaignId  String?
   occurredOn  DateTime
+  documentNumber String?
   category    String
   description String
+  taxableAmount Decimal?          @db.Decimal(12, 2)
   amount      Decimal             @db.Decimal(12, 2)
   vatAmount   Decimal?            @db.Decimal(12, 2)
   driveFileId String?
@@ -624,14 +650,22 @@ model CalendarEvent {
   title       String
   startsAt    DateTime
   endsAt      DateTime?
+  allDay      Boolean             @default(true)
   source      CalendarEventSource @default(MANUAL)
+  eventType   String?
+  campaignId  String?
+  fieldGroupId String?
   operationId String?
   notes       String?
+  campaign    Campaign?           @relation(fields: [campaignId], references: [id])
+  fieldGroup  FieldGroup?         @relation(fields: [fieldGroupId], references: [id])
   operation   Operation?          @relation(fields: [operationId], references: [id])
   createdAt   DateTime            @default(now())
   updatedAt   DateTime            @updatedAt
 
   @@index([startsAt])
+  @@index([campaignId])
+  @@index([fieldGroupId])
 }
 
 model DriveFile {
@@ -642,6 +676,7 @@ model DriveFile {
   module               DocumentModule        @default(GENERAL)
   folderPath           String?
   webViewLink          String?
+  inlineDataBase64     String?               @db.Text
   sizeBytes            BigInt?
   checksum             String?
   uploadedAt           DateTime?

@@ -7,9 +7,11 @@ import { redirect } from "next/navigation";
 import { ZodError } from "zod";
 import { requireUser } from "@/lib/auth/permissions";
 import { writeAuditLog } from "@/lib/audit";
+import { upsertInlinePdf } from "@/lib/documents";
 import { prisma } from "@/lib/prisma";
 import { fieldGroupFormSchema, operationFormSchema } from "@/lib/validation/operations";
 import {
+  assertAvailableStock,
   rebuildWarehouseBalances,
   recordWarehouseMovement
 } from "@/lib/warehouse/stock";
@@ -28,6 +30,16 @@ function selectedValues(formData: FormData, key: string) {
     .getAll(key)
     .map((value) => String(value))
     .filter(Boolean);
+}
+
+function parseProductRows(formData: FormData, maxRows = 4) {
+  return Array.from({ length: maxRows }, (_, index) => ({
+    productMaterialId:
+      stringValue(formData, `products.${index}.productMaterialId`) || undefined,
+    quantity: stringValue(formData, `products.${index}.quantity`) || undefined,
+    unit: stringValue(formData, `products.${index}.unit`) || undefined,
+    note: stringValue(formData, `products.${index}.note`) || undefined
+  })).filter((row) => row.productMaterialId || row.quantity || row.unit || row.note);
 }
 
 function actionErrorMessage(error: unknown) {
@@ -107,6 +119,39 @@ async function validateOperationArea(input: {
   }
 }
 
+async function validateMaterials(
+  rows: {
+    productMaterialId?: string;
+    quantity?: string;
+    unit?: string;
+    note?: string;
+  }[],
+  releasedByProduct: Map<string, number> = new Map()
+) {
+  for (const row of rows) {
+    if (!row.productMaterialId && !row.quantity && !row.unit && !row.note) continue;
+    if (!row.productMaterialId) {
+      throw new Error("Ogni riga prodotto compilata deve avere un materiale selezionato.");
+    }
+    if (!row.quantity || Number(row.quantity.replace(",", ".")) <= 0) {
+      throw new Error("La quantità dei prodotti usati deve essere positiva.");
+    }
+    const product = await prisma.productMaterial.findUniqueOrThrow({
+      where: { id: row.productMaterialId }
+    });
+    const requested = Number(row.quantity.replace(",", "."));
+    const released = releasedByProduct.get(row.productMaterialId) ?? 0;
+    const available = requested - released;
+    if (available > 0) {
+      await assertAvailableStock({
+        productMaterialId: row.productMaterialId,
+        quantity: available,
+        label: product.name
+      });
+    }
+  }
+}
+
 export async function createOperationAction(formData: FormData) {
   const session = await requireUser();
   try {
@@ -126,22 +171,14 @@ async function createOperation(
     performedOn: `${stringValue(formData, "performedOn")}T00:00:00.000Z`,
     fieldGroupId: stringValue(formData, "fieldGroupId") || undefined,
     fieldIds: selectedValues(formData, "fieldIds"),
-    productMaterialId: stringValue(formData, "productMaterialId") || undefined,
-    quantity: stringValue(formData, "quantity") || undefined,
-    quantityUnit: stringValue(formData, "quantityUnit") || undefined,
     treatedAreaHa: stringValue(formData, "treatedAreaHa") || undefined,
     treatmentReason: stringValue(formData, "treatmentReason") || undefined,
     notes: stringValue(formData, "notes") || undefined,
-    attachmentName: stringValue(formData, "attachmentName") || undefined,
-    attachmentDriveFileId: stringValue(formData, "attachmentDriveFileId") || undefined,
-    attachmentUrl: stringValue(formData, "attachmentUrl") || undefined
+    products: parseProductRows(formData)
   });
 
   if (!parsed.fieldGroupId && parsed.fieldIds.length === 0) {
     throw new Error("Selezionare almeno un gruppo o un campo.");
-  }
-  if (parsed.quantity !== undefined && Number(parsed.quantity) <= 0) {
-    throw new Error("La quantita' deve essere positiva.");
   }
 
   const campaign = await prisma.campaign.findUniqueOrThrow({
@@ -170,73 +207,85 @@ async function createOperation(
     fieldGroupId: parsed.fieldGroupId,
     fieldIds: parsed.fieldIds
   });
-  const operation = await prisma.operation.create({
-    data: {
-      campaignId: parsed.campaignId,
-      operationTypeId: parsed.operationTypeId,
-      performedOn: parsed.performedOn,
-      productMaterialId: parsed.productMaterialId || null,
-      quantity: parsed.quantity,
-      quantityUnit: parsed.quantityUnit || null,
-      treatedAreaHa: parsed.treatedAreaHa,
-      treatmentReason: parsed.treatmentReason || null,
-      notes: parsed.notes || null,
-      fieldGroups: parsed.fieldGroupId
-        ? { create: [{ fieldGroupId: parsed.fieldGroupId }] }
-        : undefined,
-      fields:
-        parsed.fieldIds.length > 0
-          ? { create: parsed.fieldIds.map((fieldId) => ({ fieldId })) }
-          : undefined
-    }
-  });
-
-  if (parsed.productMaterialId && parsed.quantity) {
-    const product = await prisma.productMaterial.findUniqueOrThrow({
-      where: { id: parsed.productMaterialId }
-    });
-    await recordWarehouseMovement({
-      productMaterialId: parsed.productMaterialId,
-      movementType: WarehouseMovementType.OUT,
-      source: WarehouseMovementSource.LAVORAZIONE_OUT,
-      sourceId: operation.id,
-      operationId: operation.id,
-      actorUserId: session.user?.id,
-      quantity: parsed.quantity,
-      unit: parsed.quantityUnit || product.unit,
-      movedOn: parsed.performedOn,
-      note: "Scarico automatico da lavorazione"
-    });
-  }
-
-  if (parsed.attachmentName || parsed.attachmentDriveFileId || parsed.attachmentUrl) {
-    const googleDriveFileId =
-      parsed.attachmentDriveFileId || `manual-operation-${operation.id}-${Date.now()}`;
-    const driveFile = await prisma.driveFile.upsert({
-      where: { googleDriveFileId },
-      update: {
-        name: parsed.attachmentName || "Allegato lavorazione",
-        mimeType: "application/pdf",
-        module: DocumentModule.OPERATIONS,
-        webViewLink: parsed.attachmentUrl || null
-      },
-      create: {
-        googleDriveFileId,
-        name: parsed.attachmentName || "Allegato lavorazione",
-        mimeType: "application/pdf",
-        module: DocumentModule.OPERATIONS,
-        webViewLink: parsed.attachmentUrl || null
-      }
-    });
-
-    await prisma.operationAttachment.create({
+  await validateMaterials(parsed.products);
+  const operation = await prisma.$transaction(async (tx) => {
+    const firstMaterial = parsed.products.find((row) => row.productMaterialId && row.quantity);
+    const firstProduct = firstMaterial?.productMaterialId
+      ? await tx.productMaterial.findUnique({ where: { id: firstMaterial.productMaterialId } })
+      : null;
+    const createdOperation = await tx.operation.create({
       data: {
-        operationId: operation.id,
-        driveFileId: driveFile.id,
-        label: parsed.attachmentName || "Allegato"
+        campaignId: parsed.campaignId,
+        operationTypeId: parsed.operationTypeId,
+        performedOn: parsed.performedOn,
+        productMaterialId: firstMaterial?.productMaterialId || null,
+        quantity: firstMaterial?.quantity?.replace(",", "."),
+        quantityUnit: firstMaterial?.unit || firstProduct?.unit || null,
+        treatedAreaHa: parsed.treatedAreaHa,
+        treatmentReason: parsed.treatmentReason || null,
+        notes: parsed.notes || null,
+        fieldGroups: parsed.fieldGroupId
+          ? { create: [{ fieldGroupId: parsed.fieldGroupId }] }
+          : undefined,
+        fields:
+          parsed.fieldIds.length > 0
+            ? { create: parsed.fieldIds.map((fieldId) => ({ fieldId })) }
+            : undefined
       }
     });
-  }
+
+    for (const row of parsed.products) {
+      if (!row.productMaterialId || !row.quantity) continue;
+      const product = await tx.productMaterial.findUniqueOrThrow({
+        where: { id: row.productMaterialId }
+      });
+      await tx.operationMaterialUsage.create({
+        data: {
+          operationId: createdOperation.id,
+          productMaterialId: row.productMaterialId,
+          quantity: row.quantity.replace(",", "."),
+          unit: row.unit || product.unit,
+          note: row.note || null
+        }
+      });
+      await recordWarehouseMovement(
+        {
+          productMaterialId: row.productMaterialId,
+          movementType: WarehouseMovementType.OUT,
+          source: WarehouseMovementSource.LAVORAZIONE_OUT,
+          sourceId: createdOperation.id,
+          operationId: createdOperation.id,
+          actorUserId: session.user?.id,
+          quantity: row.quantity.replace(",", "."),
+          unit: row.unit || product.unit,
+          movedOn: parsed.performedOn,
+          note: row.note || "Scarico automatico da lavorazione"
+        },
+        tx
+      );
+    }
+
+    const attachmentFile = formData.get("attachmentFile");
+    if (attachmentFile instanceof File && attachmentFile.size > 0) {
+      const driveFile = await upsertInlinePdf(
+        {
+          file: attachmentFile,
+          module: DocumentModule.OPERATIONS
+        },
+        tx
+      );
+      await tx.operationAttachment.create({
+        data: {
+          operationId: createdOperation.id,
+          driveFileId: driveFile.id,
+          label: attachmentFile.name || "Allegato lavorazione"
+        }
+      });
+    }
+
+    await rebuildWarehouseBalances(tx);
+    return createdOperation;
+  });
 
   await writeAuditLog({
     actorUserId: session.user?.id,
@@ -247,7 +296,7 @@ async function createOperation(
   });
 
   revalidatePath("/lavorazioni");
-  redirect(`/lavorazioni/${operation.id}`);
+  redirect("/lavorazioni");
 }
 
 export async function updateOperationAction(operationId: string, formData: FormData) {
@@ -270,27 +319,19 @@ async function updateOperation(
     performedOn: `${stringValue(formData, "performedOn")}T00:00:00.000Z`,
     fieldGroupId: stringValue(formData, "fieldGroupId") || undefined,
     fieldIds: selectedValues(formData, "fieldIds"),
-    productMaterialId: stringValue(formData, "productMaterialId") || undefined,
-    quantity: stringValue(formData, "quantity") || undefined,
-    quantityUnit: stringValue(formData, "quantityUnit") || undefined,
     treatedAreaHa: stringValue(formData, "treatedAreaHa") || undefined,
     treatmentReason: stringValue(formData, "treatmentReason") || undefined,
     notes: stringValue(formData, "notes") || undefined,
-    attachmentName: stringValue(formData, "attachmentName") || undefined,
-    attachmentDriveFileId: stringValue(formData, "attachmentDriveFileId") || undefined,
-    attachmentUrl: stringValue(formData, "attachmentUrl") || undefined
+    products: parseProductRows(formData)
   });
 
   if (!parsed.fieldGroupId && parsed.fieldIds.length === 0) {
     throw new Error("Selezionare almeno un gruppo o un campo.");
   }
-  if (parsed.quantity !== undefined && Number(parsed.quantity) <= 0) {
-    throw new Error("La quantita' deve essere positiva.");
-  }
 
   const before = await prisma.operation.findUniqueOrThrow({
     where: { id: operationId },
-    include: { fieldGroups: true, fields: true, attachments: true }
+    include: { fieldGroups: true, fields: true, attachments: true, materialUsages: true }
   });
   const campaign = await prisma.campaign.findUniqueOrThrow({ where: { id: parsed.campaignId } });
   requireDateInsideCampaign(parsed.performedOn, campaign);
@@ -312,22 +353,35 @@ async function updateOperation(
     fieldGroupId: parsed.fieldGroupId,
     fieldIds: parsed.fieldIds
   });
+  const releasedByProduct = new Map<string, number>();
+  for (const usage of before.materialUsages) {
+    releasedByProduct.set(
+      usage.productMaterialId,
+      (releasedByProduct.get(usage.productMaterialId) ?? 0) + Number(usage.quantity)
+    );
+  }
+  await validateMaterials(parsed.products, releasedByProduct);
   const after = await prisma.$transaction(async (tx) => {
     await tx.operationFieldGroup.deleteMany({ where: { operationId } });
     await tx.operationField.deleteMany({ where: { operationId } });
+    await tx.operationMaterialUsage.deleteMany({ where: { operationId } });
     await tx.warehouseMovement.deleteMany({
       where: { operationId, source: WarehouseMovementSource.LAVORAZIONE_OUT }
     });
 
+    const firstMaterial = parsed.products.find((row) => row.productMaterialId && row.quantity);
+    const firstProduct = firstMaterial?.productMaterialId
+      ? await tx.productMaterial.findUnique({ where: { id: firstMaterial.productMaterialId } })
+      : null;
     const updatedOperation = await tx.operation.update({
       where: { id: operationId },
       data: {
         campaignId: parsed.campaignId,
         operationTypeId: parsed.operationTypeId,
         performedOn: parsed.performedOn,
-        productMaterialId: parsed.productMaterialId || null,
-        quantity: parsed.quantity,
-        quantityUnit: parsed.quantityUnit || null,
+        productMaterialId: firstMaterial?.productMaterialId || null,
+        quantity: firstMaterial?.quantity?.replace(",", "."),
+        quantityUnit: firstMaterial?.unit || firstProduct?.unit || null,
         treatedAreaHa: parsed.treatedAreaHa,
         treatmentReason: parsed.treatmentReason || null,
         notes: parsed.notes || null,
@@ -341,25 +395,64 @@ async function updateOperation(
       }
     });
 
-    if (parsed.productMaterialId && parsed.quantity) {
+    for (const row of parsed.products) {
+      if (!row.productMaterialId || !row.quantity) continue;
       const product = await tx.productMaterial.findUniqueOrThrow({
-        where: { id: parsed.productMaterialId }
+        where: { id: row.productMaterialId }
+      });
+      await tx.operationMaterialUsage.create({
+        data: {
+          operationId,
+          productMaterialId: row.productMaterialId,
+          quantity: row.quantity.replace(",", "."),
+          unit: row.unit || product.unit,
+          note: row.note || null
+        }
       });
       await recordWarehouseMovement(
         {
-          productMaterialId: parsed.productMaterialId,
+          productMaterialId: row.productMaterialId,
           movementType: WarehouseMovementType.OUT,
           source: WarehouseMovementSource.LAVORAZIONE_OUT,
           sourceId: operationId,
           operationId,
           actorUserId: session.user?.id,
-          quantity: parsed.quantity,
-          unit: parsed.quantityUnit || product.unit,
+          quantity: row.quantity.replace(",", "."),
+          unit: row.unit || product.unit,
           movedOn: parsed.performedOn,
-          note: "Scarico automatico da lavorazione"
+          note: row.note || "Scarico automatico da lavorazione"
         },
         tx
       );
+    }
+
+    const attachmentFile = formData.get("attachmentFile");
+    if (attachmentFile instanceof File && attachmentFile.size > 0) {
+      const driveFile = await upsertInlinePdf(
+        {
+          file: attachmentFile,
+          module: DocumentModule.OPERATIONS,
+          existingDriveFileId: before.attachments[0]?.driveFileId
+        },
+        tx
+      );
+      if (before.attachments[0]) {
+        await tx.operationAttachment.update({
+          where: { id: before.attachments[0].id },
+          data: {
+            driveFileId: driveFile.id,
+            label: attachmentFile.name || "Allegato lavorazione"
+          }
+        });
+      } else {
+        await tx.operationAttachment.create({
+          data: {
+            operationId,
+            driveFileId: driveFile.id,
+            label: attachmentFile.name || "Allegato lavorazione"
+          }
+        });
+      }
     }
 
     await rebuildWarehouseBalances(tx);

@@ -11,7 +11,7 @@ export type OperationFilters = {
 };
 
 export async function getOperationsFiltersData() {
-  const [campaigns, groups, fields, operationTypes, products, crops] = await Promise.all([
+  const [campaigns, groups, fields, operationTypes, products, crops, balances, reasons] = await Promise.all([
     prisma.campaign.findMany({ orderBy: { startsOn: "desc" } }),
     prisma.fieldGroup.findMany({
       include: {
@@ -28,10 +28,18 @@ export async function getOperationsFiltersData() {
     }),
     prisma.operationType.findMany({ orderBy: [{ category: "asc" }, { name: "asc" }] }),
     prisma.productMaterial.findMany({ where: { active: true }, orderBy: { name: "asc" } }),
-    prisma.crop.findMany({ orderBy: { name: "asc" } })
+    prisma.crop.findMany({ orderBy: { name: "asc" } }),
+    prisma.warehouseBalance.findMany(),
+    prisma.operation.findMany({
+      where: { treatmentReason: { not: null } },
+      select: { treatmentReason: true },
+      distinct: ["treatmentReason"],
+      orderBy: { performedOn: "desc" },
+      take: 20
+    })
   ]);
 
-  return { campaigns, groups, fields, operationTypes, products, crops };
+  return { campaigns, groups, fields, operationTypes, products, crops, balances, reasons };
 }
 
 export async function getOperationsList(filters: OperationFilters) {
@@ -69,6 +77,7 @@ export async function getOperationsList(filters: OperationFilters) {
       campaign: true,
       operationType: true,
       productMaterial: true,
+      materialUsages: { include: { productMaterial: true } },
       fieldGroups: { include: { fieldGroup: { include: { crop: true } } } },
       fields: { include: { field: true } },
       attachments: { include: { driveFile: true } }
@@ -84,6 +93,7 @@ export async function getOperationDetail(id: string) {
       campaign: true,
       operationType: true,
       productMaterial: true,
+      materialUsages: { include: { productMaterial: true } },
       fieldGroups: {
         include: {
           fieldGroup: {

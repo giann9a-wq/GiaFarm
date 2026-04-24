@@ -1,5 +1,6 @@
 import { createOperationAction, updateOperationAction } from "@/app/(app)/lavorazioni/actions";
 import { OperationAreaFields } from "@/app/(app)/lavorazioni/operation-area-fields";
+import { OperationMaterialsFields } from "@/app/(app)/lavorazioni/operation-materials-fields";
 import { Button } from "@/components/ui/button";
 import { formatCategory, formatDecimal } from "@/lib/operations/format";
 import {
@@ -21,7 +22,7 @@ export async function OperationForm({
   defaultFieldIds = [],
   actionError
 }: OperationFormProps) {
-  const { campaigns, groups, fields, operationTypes, products, operation } =
+  const { campaigns, groups, fields, operationTypes, products, balances, reasons, operation } =
     await getOperationFormData(operationId);
   const activeCampaign =
     campaigns.find((campaign) => campaign.status === "ACTIVE") ?? campaigns[0];
@@ -46,6 +47,32 @@ export async function OperationForm({
     label: `${field.municipality} Fg. ${field.cadastralSheet} Map. ${field.cadastralParcel}`,
     areaHa: fieldsUsedAreaHa([field], [field.id])
   }));
+  const productOptions = products.map((product) => ({
+    id: product.id,
+    name: product.name,
+    unit: product.unit,
+    stock: balances
+      .filter((balance) => balance.productMaterialId === product.id)
+      .reduce((sum, balance) => sum + Number(balance.quantity), 0)
+  }));
+  const defaultMaterialRows =
+    operation?.materialUsages.length
+      ? operation.materialUsages.map((usage) => ({
+          productMaterialId: usage.productMaterialId,
+          quantity: String(usage.quantity),
+          unit: usage.unit,
+          note: usage.note
+        }))
+      : operation?.productMaterialId
+        ? [
+            {
+              productMaterialId: operation.productMaterialId,
+              quantity: operation.quantity ? String(operation.quantity) : "",
+              unit: operation.quantityUnit,
+              note: ""
+            }
+          ]
+        : [];
   const action = operation
     ? updateOperationAction.bind(null, operation.id)
     : createOperationAction;
@@ -102,7 +129,7 @@ export async function OperationForm({
         </label>
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="grid gap-4 lg:grid-cols-1">
         <OperationAreaFields
           groups={groupOptions}
           fields={fieldOptions}
@@ -112,52 +139,14 @@ export async function OperationForm({
             suggestedAreaHa ? formatDecimal(suggestedAreaHa, 4).replace(/\./g, "") : ""
           }
         />
-        <label className="text-sm font-medium">
-          Prodotto / materiale
-          <select
-            className="focus-ring mt-2 h-10 w-full rounded-[8px] border border-input bg-background px-3"
-            name="productMaterialId"
-            defaultValue={operation?.productMaterialId ?? ""}
-          >
-            <option value="">Nessun prodotto</option>
-            {products.map((product) => (
-              <option key={product.id} value={product.id}>
-                {product.name} ({product.unit})
-              </option>
-            ))}
-          </select>
-        </label>
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-2">
-        <label className="text-sm font-medium">
-          Quantita&apos;
-          <input
-            className="focus-ring mt-2 h-10 w-full rounded-[8px] border border-input bg-background px-3"
-            inputMode="decimal"
-            name="quantity"
-            defaultValue={operation?.quantity ? String(operation.quantity) : ""}
-          />
-        </label>
-        <label className="text-sm font-medium">
-          Unita&apos; misura
-          <input
-            className="focus-ring mt-2 h-10 w-full rounded-[8px] border border-input bg-background px-3"
-            name="quantityUnit"
-            placeholder="kg, l, q..."
-            defaultValue={operation?.quantityUnit ?? ""}
-          />
-        </label>
-      </div>
-
-      <label className="block text-sm font-medium">
-        Motivo trattamento
-        <input
-          className="focus-ring mt-2 h-10 w-full rounded-[8px] border border-input bg-background px-3"
-          name="treatmentReason"
-          defaultValue={operation?.treatmentReason ?? ""}
-        />
-      </label>
+      <OperationMaterialsFields
+        products={productOptions}
+        defaultReason={operation?.treatmentReason}
+        defaultRows={defaultMaterialRows}
+        reasonSuggestions={reasons.map((item) => item.treatmentReason).filter(Boolean) as string[]}
+      />
 
       <label className="block text-sm font-medium">
         Note
@@ -168,19 +157,24 @@ export async function OperationForm({
         />
       </label>
 
-      <fieldset className="grid gap-4 rounded-[8px] border border-border p-4 lg:grid-cols-3">
+      <fieldset className="grid gap-4 rounded-[8px] border border-border p-4 lg:grid-cols-2">
         <legend className="px-1 text-sm font-semibold">Allegato PDF opzionale</legend>
         <label className="text-sm font-medium">
-          Nome documento
-          <input className="focus-ring mt-2 h-10 w-full rounded-[8px] border border-input bg-background px-3" name="attachmentName" />
+          Carica PDF
+          <input
+            accept="application/pdf"
+            className="focus-ring mt-2 block w-full text-sm"
+            name="attachmentFile"
+            type="file"
+          />
         </label>
         <label className="text-sm font-medium">
-          Google Drive file id
-          <input className="focus-ring mt-2 h-10 w-full rounded-[8px] border border-input bg-background px-3" name="attachmentDriveFileId" />
-        </label>
-        <label className="text-sm font-medium">
-          Link apertura
-          <input className="focus-ring mt-2 h-10 w-full rounded-[8px] border border-input bg-background px-3" name="attachmentUrl" type="url" />
+          Documento gia&apos; collegato
+          <input
+            className="focus-ring mt-2 h-10 w-full rounded-[8px] border border-input bg-background px-3"
+            defaultValue={operation?.attachments[0]?.driveFile.name ?? ""}
+            disabled
+          />
         </label>
       </fieldset>
 

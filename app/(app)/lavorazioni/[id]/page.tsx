@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { DocumentPreviewButton } from "@/components/app/document-preview-button";
 import { PageHeader } from "@/components/app/page-header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
@@ -33,6 +34,9 @@ export default async function OperationDetailPage({
         <Button asChild>
           <Link href={`/lavorazioni/${operation.id}/modifica`}>Modifica</Link>
         </Button>
+        <Button asChild variant="secondary">
+          <Link href={`/lavorazioni/${operation.id}/scheda`}>Scheda trattamento</Link>
+        </Button>
         <form action={deleteOperationAction.bind(null, operation.id)}>
           <Button type="submit" variant="secondary">
             Elimina
@@ -52,18 +56,28 @@ export default async function OperationDetailPage({
               value={`${formatCategory(operation.operationType.category)} - ${operation.operationType.name}`}
             />
             <Detail
-              label="Prodotto"
-              value={operation.productMaterial?.name ?? "-"}
-            />
-            <Detail
-              label="Quantita'"
-              value={`${formatDecimal(operation.quantity)} ${operation.quantityUnit ?? ""}`}
-            />
-            <Detail
               label="Superficie"
               value={`${formatDecimal(operation.treatedAreaHa)} ha`}
             />
             <Detail label="Motivo" value={operation.treatmentReason ?? "-"} />
+            <div className="md:col-span-3">
+              <dt className="text-xs font-semibold uppercase text-muted-foreground">Prodotti usati</dt>
+              <div className="mt-2 space-y-2">
+                {operation.materialUsages.length > 0 ? (
+                  operation.materialUsages.map((usage) => (
+                    <div className="rounded-[8px] border border-border px-3 py-2 text-sm" key={usage.id}>
+                      <span className="font-medium">{usage.productMaterial.name}</span>
+                      <span className="ml-2 text-muted-foreground">
+                        {formatDecimal(usage.quantity)} {usage.unit}
+                      </span>
+                      {usage.note ? <span className="ml-2 text-muted-foreground">· {usage.note}</span> : null}
+                    </div>
+                  ))
+                ) : (
+                  <p>{operation.productMaterial?.name ?? "-"}</p>
+                )}
+              </div>
+            </div>
             <div className="md:col-span-3">
               <Detail label="Note" value={operation.notes ?? "-"} />
             </div>
@@ -114,13 +128,10 @@ export default async function OperationDetailPage({
                 <p className="font-medium">{attachment.label || attachment.driveFile.name}</p>
                 <p className="text-sm text-muted-foreground">{attachment.driveFile.name}</p>
               </div>
-              {attachment.driveFile.webViewLink ? (
-                <Button asChild variant="secondary">
-                  <Link href={attachment.driveFile.webViewLink} target="_blank">
-                    Apri
-                  </Link>
-                </Button>
-              ) : null}
+              <DocumentPreviewButton
+                href={`/api/files/${attachment.driveFile.id}`}
+                title={attachment.driveFile.name}
+              />
             </div>
           ))}
           {operation.attachments.length === 0 ? (

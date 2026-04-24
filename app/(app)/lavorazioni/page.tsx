@@ -172,11 +172,21 @@ export default async function OperationsPage({
                     {operation.operationType.name}
                   </td>
                   <td className="px-4 py-3">
-                    {operation.productMaterial?.name ?? "-"}
+                    {operation.materialUsages.length > 0
+                      ? operation.materialUsages
+                          .map((usage) => usage.productMaterial.name)
+                          .join(", ")
+                      : operation.productMaterial?.name ?? "-"}
                   </td>
                   <td className="px-4 py-3">
-                    {formatDecimal(operation.quantity)}{" "}
-                    {operation.quantityUnit ?? ""}
+                    {operation.materialUsages.length > 0
+                      ? operation.materialUsages
+                          .map(
+                            (usage) =>
+                              `${formatDecimal(usage.quantity)} ${usage.unit}`
+                          )
+                          .join(" · ")
+                      : `${formatDecimal(operation.quantity)} ${operation.quantityUnit ?? ""}`}
                   </td>
                   <td className="px-4 py-3">
                     {formatDecimal(operation.treatedAreaHa)} ha
