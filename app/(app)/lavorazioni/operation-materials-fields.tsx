@@ -21,13 +21,15 @@ type OperationMaterialsFieldsProps = {
   defaultRows: MaterialRow[];
   reasonSuggestions: string[];
   defaultReason?: string | null;
+  errorField?: string;
 };
 
 export function OperationMaterialsFields({
   products,
   defaultRows,
   reasonSuggestions,
-  defaultReason
+  defaultReason,
+  errorField
 }: OperationMaterialsFieldsProps) {
   const initialRows =
     defaultRows.length > 0
@@ -68,9 +70,16 @@ export function OperationMaterialsFields({
     );
   }
 
+  const productErrorClass =
+    errorField === "products" ? "border-destructive ring-2 ring-destructive/20" : "border-border";
+  const reasonErrorClass =
+    errorField === "treatmentReason"
+      ? "border-destructive ring-2 ring-destructive/20"
+      : "border-input";
+
   return (
     <>
-      <fieldset className="space-y-3 rounded-[8px] border border-border p-4">
+      <fieldset className={`space-y-3 rounded-[8px] border p-4 ${productErrorClass}`}>
         <legend className="px-1 text-sm font-semibold">Prodotti usati</legend>
         <p className="text-sm text-muted-foreground">
           Ogni riga genera uno scarico di magazzino. La quantità non può superare la giacenza residua.
@@ -134,7 +143,7 @@ export function OperationMaterialsFields({
       <label className="block text-sm font-medium">
         Motivo trattamento
         <input
-          className="focus-ring mt-2 h-10 w-full rounded-[8px] border border-input bg-background px-3"
+          className={`focus-ring mt-2 h-10 w-full rounded-[8px] border bg-background px-3 ${reasonErrorClass}`}
           list="operation-reasons"
           name="treatmentReason"
           value={reason}

@@ -93,6 +93,13 @@ export function OperationFormClient({
 }: OperationFormClientProps) {
   const [state, formAction, isPending] = useActionState(action, { error: actionError });
   const error = state.error ?? actionError;
+  const errorField = state.field;
+
+  function inputClass(field: string) {
+    return `focus-ring mt-2 h-10 w-full rounded-[8px] border bg-background px-3 ${
+      errorField === field ? "border-destructive ring-2 ring-destructive/20" : "border-input"
+    }`;
+  }
 
   return (
     <form action={formAction} className="space-y-6 rounded-[8px] border border-border bg-card p-5">
@@ -106,7 +113,7 @@ export function OperationFormClient({
         <label className="text-sm font-medium">
           Campagna
           <select
-            className="focus-ring mt-2 h-10 w-full rounded-[8px] border border-input bg-background px-3"
+            className={inputClass("campaignId")}
             defaultValue={defaultCampaignId}
             name="campaignId"
             required
@@ -121,7 +128,7 @@ export function OperationFormClient({
         <label className="text-sm font-medium">
           Data
           <input
-            className="focus-ring mt-2 h-10 w-full rounded-[8px] border border-input bg-background px-3"
+            className={inputClass("performedOn")}
             defaultValue={defaultPerformedOn}
             name="performedOn"
             required
@@ -131,7 +138,7 @@ export function OperationFormClient({
         <label className="text-sm font-medium">
           Tipologia
           <select
-            className="focus-ring mt-2 h-10 w-full rounded-[8px] border border-input bg-background px-3"
+            className={inputClass("operationTypeId")}
             defaultValue={defaultOperationTypeId ?? ""}
             name="operationTypeId"
             required
@@ -148,6 +155,7 @@ export function OperationFormClient({
 
       <OperationAreaFields
         defaultAreaHa={defaultAreaHa}
+        errorField={errorField}
         defaultFieldGroupId={defaultFieldGroupId ?? ""}
         defaultFieldIds={defaultFieldIds}
         fields={fields}
@@ -157,6 +165,7 @@ export function OperationFormClient({
       <OperationMaterialsFields
         defaultReason={defaultReason}
         defaultRows={defaultMaterialRows}
+        errorField={errorField}
         products={products}
         reasonSuggestions={reasonSuggestions}
       />

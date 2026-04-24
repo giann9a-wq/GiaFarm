@@ -21,6 +21,7 @@ type OperationAreaFieldsProps = {
   defaultFieldGroupId: string;
   defaultFieldIds: string[];
   defaultAreaHa: string;
+  errorField?: string;
 };
 
 function formatAreaInput(value: number) {
@@ -32,7 +33,8 @@ export function OperationAreaFields({
   fields,
   defaultFieldGroupId,
   defaultFieldIds,
-  defaultAreaHa
+  defaultAreaHa,
+  errorField
 }: OperationAreaFieldsProps) {
   const [selectedGroupId, setSelectedGroupId] = useState(defaultFieldGroupId);
   const [selectedFieldIds, setSelectedFieldIds] = useState(defaultFieldIds);
@@ -69,12 +71,18 @@ export function OperationAreaFields({
     setTreatedAreaHa(formatAreaInput(suggestedArea(selectedGroupId, nextFieldIds)));
   }
 
+  function inputClass(field: string) {
+    return `focus-ring mt-2 h-10 w-full rounded-[8px] border bg-background px-3 ${
+      errorField === field ? "border-destructive ring-2 ring-destructive/20" : "border-input"
+    }`;
+  }
+
   return (
     <>
       <label className="text-sm font-medium">
         Gruppo campi
         <select
-          className="focus-ring mt-2 h-10 w-full rounded-[8px] border border-input bg-background px-3"
+          className={inputClass("fieldGroupId")}
           name="fieldGroupId"
           value={selectedGroupId}
           onChange={(event) => updateGroup(event.target.value)}
@@ -88,7 +96,13 @@ export function OperationAreaFields({
         </select>
       </label>
 
-      <fieldset className="rounded-[8px] border border-border p-4 lg:col-span-2">
+      <fieldset
+        className={`rounded-[8px] border p-4 lg:col-span-2 ${
+          errorField === "fieldIds"
+            ? "border-destructive ring-2 ring-destructive/20"
+            : "border-border"
+        }`}
+      >
         <legend className="px-1 text-sm font-semibold">Campi singoli coinvolti</legend>
         <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
           {fields.map((field) => (
@@ -115,7 +129,7 @@ export function OperationAreaFields({
       <label className="text-sm font-medium">
         Superficie trattata ha
         <input
-          className="focus-ring mt-2 h-10 w-full rounded-[8px] border border-input bg-background px-3"
+          className={inputClass("treatedAreaHa")}
           inputMode="decimal"
           name="treatedAreaHa"
           value={treatedAreaHa}

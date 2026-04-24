@@ -52,8 +52,38 @@ function actionErrorMessage(error: unknown) {
   return "Impossibile salvare la lavorazione. Controllare i dati e riprovare.";
 }
 
+function actionErrorField(error: unknown) {
+  if (error instanceof ZodError) {
+    const field = error.issues[0]?.path[0];
+    return field ? String(field) : undefined;
+  }
+
+  if (!(error instanceof Error)) return undefined;
+
+  const message = error.message.toLowerCase();
+  if (message.includes("campagna")) return "campaignId";
+  if (message.includes("data")) return "performedOn";
+  if (message.includes("gruppo")) return "fieldGroupId";
+  if (message.includes("campo")) return "fieldIds";
+  if (message.includes("superficie")) return "treatedAreaHa";
+  if (
+    message.includes("materiale") ||
+    message.includes("prodotto") ||
+    message.includes("quantita") ||
+    message.includes("quantità") ||
+    message.includes("giacenza")
+  ) {
+    return "products";
+  }
+  if (message.includes("inizio")) return "startsOn";
+  if (message.includes("fine")) return "endsOn";
+  if (message.includes("nome")) return "name";
+  return undefined;
+}
+
 export type OperationActionState = {
   error?: string;
+  field?: string;
 };
 
 function requireDateInsideCampaign(date: Date, campaign: { startsOn: Date; endsOn: Date }) {
@@ -161,7 +191,7 @@ export async function createOperationAction(
     if (isRedirectError(error)) {
       throw error;
     }
-    return { error: actionErrorMessage(error) };
+    return { error: actionErrorMessage(error), field: actionErrorField(error) };
   }
 }
 
@@ -310,7 +340,7 @@ export async function updateOperationAction(
     if (isRedirectError(error)) {
       throw error;
     }
-    return { error: actionErrorMessage(error) };
+    return { error: actionErrorMessage(error), field: actionErrorField(error) };
   }
 }
 
@@ -502,88 +532,32 @@ export async function deleteOperationAction(operationId: string) {
   redirect("/lavorazioni");
 }
 
-export async function createFieldGroupAction(formData: FormData) {
+export async function createFieldGroupAction(
+  _state: OperationActionState,
+  formData: FormData
+): Promise<OperationActionState> {
   const session = await requireUser();
-  const parsed = fieldGroupFormSchema.parse({
-    campaignId: stringValue(formData, "campaignId"),
-    name: stringValue(formData, "name"),
-    cropId: stringValue(formData, "cropId") || undefined,
-    startsOn: optionalDateValue(formData, "startsOn"),
-    endsOn: optionalDateValue(formData, "endsOn"),
-    fieldIds: selectedValues(formData, "fieldIds"),
-    notes: stringValue(formData, "notes") || undefined
-  });
+  try {
+    const parsed = fieldGroupFormSchema.parse({
+      campaignId: stringValue(formData, "campaignId"),
+      name: stringValue(formData, "name"),
+      cropId: stringValue(formData, "cropId") || undefined,
+      startsOn: optionalDateValue(formData, "startsOn"),
+      endsOn: optionalDateValue(formData, "endsOn"),
+      fieldIds: selectedValues(formData, "fieldIds"),
+      notes: stringValue(formData, "notes") || undefined
+    });
 
-  const campaign = await prisma.campaign.findUniqueOrThrow({
-    where: { id: parsed.campaignId }
-  });
-  if (parsed.startsOn) requireDateInsideCampaign(parsed.startsOn, campaign);
-  if (parsed.endsOn) requireDateInsideCampaign(parsed.endsOn, campaign);
-  if (parsed.startsOn && parsed.endsOn && parsed.endsOn < parsed.startsOn) {
-    throw new Error("La fine del gruppo non puo' precedere l'inizio.");
-  }
-
-  const group = await prisma.fieldGroup.create({
-    data: {
-      campaignId: parsed.campaignId,
-      name: parsed.name,
-      cropId: parsed.cropId || null,
-      startsOn: parsed.startsOn,
-      endsOn: parsed.endsOn,
-      notes: parsed.notes || null,
-      memberships:
-        parsed.fieldIds.length > 0
-          ? { create: parsed.fieldIds.map((fieldId) => ({ fieldId })) }
-          : undefined
-    }
-  });
-
-  await writeAuditLog({
-    actorUserId: session.user?.id,
-    action: "FIELD_GROUP_CREATED",
-    entityType: "FieldGroup",
-    entityId: group.id,
-    after: group,
-    metadata: { fieldIds: parsed.fieldIds }
-  });
-
-  revalidatePath("/lavorazioni");
-  revalidatePath("/lavorazioni/gruppi");
-  redirect("/lavorazioni/gruppi");
-}
-
-export async function updateFieldGroupAction(fieldGroupId: string, formData: FormData) {
-  const session = await requireUser();
-  const parsed = fieldGroupFormSchema.parse({
-    campaignId: stringValue(formData, "campaignId"),
-    name: stringValue(formData, "name"),
-    cropId: stringValue(formData, "cropId") || undefined,
-    startsOn: optionalDateValue(formData, "startsOn"),
-    endsOn: optionalDateValue(formData, "endsOn"),
-    fieldIds: selectedValues(formData, "fieldIds"),
-    notes: stringValue(formData, "notes") || undefined
-  });
-
-  const [before, campaign] = await Promise.all([
-    prisma.fieldGroup.findUniqueOrThrow({
-      where: { id: fieldGroupId },
-      include: { memberships: true }
-    }),
-    prisma.campaign.findUniqueOrThrow({
+    const campaign = await prisma.campaign.findUniqueOrThrow({
       where: { id: parsed.campaignId }
-    })
-  ]);
+    });
+    if (parsed.startsOn) requireDateInsideCampaign(parsed.startsOn, campaign);
+    if (parsed.endsOn) requireDateInsideCampaign(parsed.endsOn, campaign);
+    if (parsed.startsOn && parsed.endsOn && parsed.endsOn < parsed.startsOn) {
+      throw new Error("La fine del gruppo non puo' precedere l'inizio.");
+    }
 
-  if (parsed.startsOn) requireDateInsideCampaign(parsed.startsOn, campaign);
-  if (parsed.endsOn) requireDateInsideCampaign(parsed.endsOn, campaign);
-  if (parsed.startsOn && parsed.endsOn && parsed.endsOn < parsed.startsOn) {
-    throw new Error("La fine del gruppo non puo' precedere l'inizio.");
-  }
-
-  const after = await prisma.$transaction(async (tx) => {
-    await tx.fieldGroupMembership.deleteMany({ where: { fieldGroupId } });
-    return tx.fieldGroup.update({
-      where: { id: fieldGroupId },
+    const group = await prisma.fieldGroup.create({
       data: {
         campaignId: parsed.campaignId,
         name: parsed.name,
@@ -595,24 +569,101 @@ export async function updateFieldGroupAction(fieldGroupId: string, formData: For
           parsed.fieldIds.length > 0
             ? { create: parsed.fieldIds.map((fieldId) => ({ fieldId })) }
             : undefined
-      },
-      include: { memberships: true }
+      }
     });
-  });
 
-  await writeAuditLog({
-    actorUserId: session.user?.id,
-    action: "FIELD_GROUP_UPDATED",
-    entityType: "FieldGroup",
-    entityId: fieldGroupId,
-    before,
-    after,
-    metadata: { fieldIds: parsed.fieldIds }
-  });
+    await writeAuditLog({
+      actorUserId: session.user?.id,
+      action: "FIELD_GROUP_CREATED",
+      entityType: "FieldGroup",
+      entityId: group.id,
+      after: group,
+      metadata: { fieldIds: parsed.fieldIds }
+    });
 
-  revalidatePath("/lavorazioni");
-  revalidatePath("/lavorazioni/gruppi");
-  redirect("/lavorazioni/gruppi");
+    revalidatePath("/lavorazioni");
+    revalidatePath("/lavorazioni/gruppi");
+    redirect("/lavorazioni/gruppi");
+  } catch (error) {
+    if (isRedirectError(error)) {
+      throw error;
+    }
+    return { error: actionErrorMessage(error), field: actionErrorField(error) };
+  }
+}
+
+export async function updateFieldGroupAction(
+  fieldGroupId: string,
+  _state: OperationActionState,
+  formData: FormData
+): Promise<OperationActionState> {
+  const session = await requireUser();
+  try {
+    const parsed = fieldGroupFormSchema.parse({
+      campaignId: stringValue(formData, "campaignId"),
+      name: stringValue(formData, "name"),
+      cropId: stringValue(formData, "cropId") || undefined,
+      startsOn: optionalDateValue(formData, "startsOn"),
+      endsOn: optionalDateValue(formData, "endsOn"),
+      fieldIds: selectedValues(formData, "fieldIds"),
+      notes: stringValue(formData, "notes") || undefined
+    });
+
+    const [before, campaign] = await Promise.all([
+      prisma.fieldGroup.findUniqueOrThrow({
+        where: { id: fieldGroupId },
+        include: { memberships: true }
+      }),
+      prisma.campaign.findUniqueOrThrow({
+        where: { id: parsed.campaignId }
+      })
+    ]);
+
+    if (parsed.startsOn) requireDateInsideCampaign(parsed.startsOn, campaign);
+    if (parsed.endsOn) requireDateInsideCampaign(parsed.endsOn, campaign);
+    if (parsed.startsOn && parsed.endsOn && parsed.endsOn < parsed.startsOn) {
+      throw new Error("La fine del gruppo non puo' precedere l'inizio.");
+    }
+
+    const after = await prisma.$transaction(async (tx) => {
+      await tx.fieldGroupMembership.deleteMany({ where: { fieldGroupId } });
+      return tx.fieldGroup.update({
+        where: { id: fieldGroupId },
+        data: {
+          campaignId: parsed.campaignId,
+          name: parsed.name,
+          cropId: parsed.cropId || null,
+          startsOn: parsed.startsOn,
+          endsOn: parsed.endsOn,
+          notes: parsed.notes || null,
+          memberships:
+            parsed.fieldIds.length > 0
+              ? { create: parsed.fieldIds.map((fieldId) => ({ fieldId })) }
+              : undefined
+        },
+        include: { memberships: true }
+      });
+    });
+
+    await writeAuditLog({
+      actorUserId: session.user?.id,
+      action: "FIELD_GROUP_UPDATED",
+      entityType: "FieldGroup",
+      entityId: fieldGroupId,
+      before,
+      after,
+      metadata: { fieldIds: parsed.fieldIds }
+    });
+
+    revalidatePath("/lavorazioni");
+    revalidatePath("/lavorazioni/gruppi");
+    redirect("/lavorazioni/gruppi");
+  } catch (error) {
+    if (isRedirectError(error)) {
+      throw error;
+    }
+    return { error: actionErrorMessage(error), field: actionErrorField(error) };
+  }
 }
 
 export async function deleteFieldGroupAction(fieldGroupId: string) {
