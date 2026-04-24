@@ -52,12 +52,9 @@ function actionErrorMessage(error: unknown) {
   return "Impossibile salvare la lavorazione. Controllare i dati e riprovare.";
 }
 
-function redirectWithActionError(path: string, error: unknown): never {
-  if (isRedirectError(error)) {
-    throw error;
-  }
-  redirect(`${path}?error=${encodeURIComponent(actionErrorMessage(error))}`);
-}
+export type OperationActionState = {
+  error?: string;
+};
 
 function requireDateInsideCampaign(date: Date, campaign: { startsOn: Date; endsOn: Date }) {
   if (date < campaign.startsOn || date > campaign.endsOn) {
@@ -152,12 +149,19 @@ async function validateMaterials(
   }
 }
 
-export async function createOperationAction(formData: FormData) {
+export async function createOperationAction(
+  _state: OperationActionState,
+  formData: FormData
+): Promise<OperationActionState> {
   const session = await requireUser();
   try {
     await createOperation(formData, session);
+    return {};
   } catch (error) {
-    redirectWithActionError("/lavorazioni/nuova", error);
+    if (isRedirectError(error)) {
+      throw error;
+    }
+    return { error: actionErrorMessage(error) };
   }
 }
 
@@ -195,12 +199,6 @@ async function createOperation(
 
   if (group && group.campaignId !== parsed.campaignId) {
     throw new Error("Il gruppo selezionato non appartiene alla campagna scelta.");
-  }
-  if (group?.startsOn && parsed.performedOn < group.startsOn) {
-    throw new Error("La lavorazione e' precedente all'inizio del gruppo selezionato.");
-  }
-  if (group?.endsOn && parsed.performedOn > group.endsOn) {
-    throw new Error("La lavorazione e' successiva alla fine del gruppo selezionato.");
   }
   await validateOperationArea({
     treatedAreaHa: parsed.treatedAreaHa,
@@ -299,12 +297,20 @@ async function createOperation(
   redirect("/lavorazioni");
 }
 
-export async function updateOperationAction(operationId: string, formData: FormData) {
+export async function updateOperationAction(
+  operationId: string,
+  _state: OperationActionState,
+  formData: FormData
+): Promise<OperationActionState> {
   const session = await requireUser();
   try {
     await updateOperation(operationId, formData, session);
+    return {};
   } catch (error) {
-    redirectWithActionError(`/lavorazioni/${operationId}/modifica`, error);
+    if (isRedirectError(error)) {
+      throw error;
+    }
+    return { error: actionErrorMessage(error) };
   }
 }
 
@@ -341,12 +347,6 @@ async function updateOperation(
     : null;
   if (group && group.campaignId !== parsed.campaignId) {
     throw new Error("Il gruppo selezionato non appartiene alla campagna scelta.");
-  }
-  if (group?.startsOn && parsed.performedOn < group.startsOn) {
-    throw new Error("La lavorazione e' precedente all'inizio del gruppo selezionato.");
-  }
-  if (group?.endsOn && parsed.performedOn > group.endsOn) {
-    throw new Error("La lavorazione e' successiva alla fine del gruppo selezionato.");
   }
   await validateOperationArea({
     treatedAreaHa: parsed.treatedAreaHa,

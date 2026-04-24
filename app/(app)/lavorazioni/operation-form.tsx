@@ -1,7 +1,5 @@
 import { createOperationAction, updateOperationAction } from "@/app/(app)/lavorazioni/actions";
-import { OperationAreaFields } from "@/app/(app)/lavorazioni/operation-area-fields";
-import { OperationMaterialsFields } from "@/app/(app)/lavorazioni/operation-materials-fields";
-import { Button } from "@/components/ui/button";
+import { OperationFormClient } from "@/app/(app)/lavorazioni/operation-form-client";
 import { formatCategory, formatDecimal } from "@/lib/operations/format";
 import {
   fieldsUsedAreaHa,
@@ -78,109 +76,29 @@ export async function OperationForm({
     : createOperationAction;
 
   return (
-    <form action={action} className="space-y-6 rounded-[8px] border border-border bg-card p-5">
-      {actionError ? (
-        <div className="rounded-[8px] border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">
-          {actionError}
-        </div>
-      ) : null}
-
-      <div className="grid gap-4 lg:grid-cols-3">
-        <label className="text-sm font-medium">
-          Campagna
-          <select
-            className="focus-ring mt-2 h-10 w-full rounded-[8px] border border-input bg-background px-3"
-            defaultValue={operation?.campaignId ?? selectedGroup?.campaignId ?? activeCampaign?.id}
-            name="campaignId"
-            required
-          >
-            {campaigns.map((campaign) => (
-              <option key={campaign.id} value={campaign.id}>
-                {campaign.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="text-sm font-medium">
-          Data
-          <input
-            className="focus-ring mt-2 h-10 w-full rounded-[8px] border border-input bg-background px-3"
-            defaultValue={operation?.performedOn.toISOString().slice(0, 10)}
-            name="performedOn"
-            required
-            type="date"
-          />
-        </label>
-        <label className="text-sm font-medium">
-          Tipologia
-          <select
-            className="focus-ring mt-2 h-10 w-full rounded-[8px] border border-input bg-background px-3"
-            name="operationTypeId"
-            required
-            defaultValue={operation?.operationTypeId ?? ""}
-          >
-            <option value="">Seleziona</option>
-            {operationTypes.map((type) => (
-              <option key={type.id} value={type.id}>
-                {formatCategory(type.category)} - {type.name}
-              </option>
-            ))}
-          </select>
-        </label>
-      </div>
-
-      <div className="grid gap-4 lg:grid-cols-1">
-        <OperationAreaFields
-          groups={groupOptions}
-          fields={fieldOptions}
-          defaultFieldGroupId={selectedGroupId}
-          defaultFieldIds={selectedFieldIds}
-          defaultAreaHa={
-            suggestedAreaHa ? formatDecimal(suggestedAreaHa, 4).replace(/\./g, "") : ""
-          }
-        />
-      </div>
-
-      <OperationMaterialsFields
-        products={productOptions}
-        defaultReason={operation?.treatmentReason}
-        defaultRows={defaultMaterialRows}
-        reasonSuggestions={reasons.map((item) => item.treatmentReason).filter(Boolean) as string[]}
-      />
-
-      <label className="block text-sm font-medium">
-        Note
-        <textarea
-          className="focus-ring mt-2 min-h-24 w-full rounded-[8px] border border-input bg-background px-3 py-2"
-          name="notes"
-          defaultValue={operation?.notes ?? ""}
-        />
-      </label>
-
-      <fieldset className="grid gap-4 rounded-[8px] border border-border p-4 lg:grid-cols-2">
-        <legend className="px-1 text-sm font-semibold">Allegato PDF opzionale</legend>
-        <label className="text-sm font-medium">
-          Carica PDF
-          <input
-            accept="application/pdf"
-            className="focus-ring mt-2 block w-full text-sm"
-            name="attachmentFile"
-            type="file"
-          />
-        </label>
-        <label className="text-sm font-medium">
-          Documento gia&apos; collegato
-          <input
-            className="focus-ring mt-2 h-10 w-full rounded-[8px] border border-input bg-background px-3"
-            defaultValue={operation?.attachments[0]?.driveFile.name ?? ""}
-            disabled
-          />
-        </label>
-      </fieldset>
-
-      <div className="flex justify-end">
-        <Button type="submit">{operation ? "Salva lavorazione" : "Crea lavorazione"}</Button>
-      </div>
-    </form>
+    <OperationFormClient
+      action={action}
+      actionError={actionError}
+      campaigns={campaigns.map((campaign) => ({ id: campaign.id, name: campaign.name }))}
+      defaultAreaHa={suggestedAreaHa ? formatDecimal(suggestedAreaHa, 4).replace(/\./g, "") : ""}
+      defaultCampaignId={operation?.campaignId ?? selectedGroup?.campaignId ?? activeCampaign?.id}
+      defaultFieldGroupId={selectedGroupId}
+      defaultFieldIds={selectedFieldIds}
+      defaultMaterialRows={defaultMaterialRows}
+      defaultNotes={operation?.notes}
+      defaultOperationTypeId={operation?.operationTypeId}
+      defaultPerformedOn={operation?.performedOn.toISOString().slice(0, 10)}
+      defaultReason={operation?.treatmentReason}
+      existingAttachmentName={operation?.attachments[0]?.driveFile.name}
+      fields={fieldOptions}
+      groups={groupOptions}
+      isEditing={Boolean(operation)}
+      operationTypes={operationTypes.map((type) => ({
+        id: type.id,
+        label: `${formatCategory(type.category)} - ${type.name}`
+      }))}
+      products={productOptions}
+      reasonSuggestions={reasons.map((item) => item.treatmentReason).filter(Boolean) as string[]}
+    />
   );
 }
